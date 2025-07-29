@@ -1,0 +1,17 @@
+import { Router } from 'express';
+import { getUserSettings, updateUserSettings } from '../controllers/settingsController';
+import { authenticate } from '../middleware/auth';
+import { validate, updateSettingsSchema } from '../middleware/validation';
+
+const router = Router();
+
+// All routes require authentication
+router.use(authenticate);
+
+// Get user settings
+router.get('/', getUserSettings);
+
+// Update user settings
+router.put('/', validate(updateSettingsSchema), updateUserSettings);
+
+export default router;
