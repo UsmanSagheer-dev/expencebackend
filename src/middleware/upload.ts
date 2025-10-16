@@ -1,8 +1,8 @@
-import multer from 'multer';
-import { v2 as cloudinary } from 'cloudinary';
-import path from 'path';
-import { Request } from 'express';
-import fs from 'fs';
+import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
+import path from "path";
+import { Request } from "express";
+import fs from "fs";
 
 // Configure Cloudinary
 cloudinary.config({
@@ -14,26 +14,33 @@ cloudinary.config({
 // Local storage configuration
 const localStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, "uploads/");
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-  }
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    cb(
+      null,
+      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
+    );
+  },
 });
 
 // File filter
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-  const allowedTypes = process.env.ALLOWED_FILE_TYPES?.split(',') || [
-    'image/jpeg',
-    'image/jpg',
-    'image/png'
+const fileFilter = (
+  req: Request,
+  file: Express.Multer.File,
+  cb: multer.FileFilterCallback
+) => {
+  const allowedTypes = process.env.ALLOWED_FILE_TYPES?.split(",") || [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
   ];
 
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only JPEG, JPG, and PNG files are allowed'));
+    cb(new Error("Only JPEG, JPG, and PNG files are allowed"));
   }
 };
 
@@ -42,12 +49,12 @@ export const upload = multer({
   storage: localStorage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: parseInt(process.env.MAX_FILE_SIZE || '5242880'), // 5MB default
+    fileSize: parseInt(process.env.MAX_FILE_SIZE || "5242880"), // 5MB default
   },
 });
 
 // Single file upload middleware for bill images
-export const uploadBillImage = upload.single('billImage');
+export const uploadBillImage = upload.single("billImage");
 
 // Helper function to upload to Cloudinary
 export const uploadToCloudinary = async (filePath: string): Promise<string> => {
@@ -58,10 +65,10 @@ export const uploadToCloudinary = async (filePath: string): Promise<string> => {
     }
 
     const result = await cloudinary.uploader.upload(filePath, {
-      folder: 'expense-bills',
+      folder: "expense-bills",
       transformation: [
-        { width: 1000, height: 1000, crop: 'limit', quality: 'auto' }
-      ]
+        { width: 1000, height: 1000, crop: "limit", quality: "auto" },
+      ],
     });
 
     // Delete local file after uploading to Cloudinary
@@ -69,46 +76,50 @@ export const uploadToCloudinary = async (filePath: string): Promise<string> => {
 
     return result.secure_url;
   } catch (error) {
-    console.error('Cloudinary upload error:', error);
     // Return local file path as fallback
     return `/uploads/${path.basename(filePath)}`;
   }
 };
 
 // Error handling for file upload
-export const handleUploadError = (error: any, req: Request, res: any, next: any) => {
+export const handleUploadError = (
+  error: any,
+  req: Request,
+  res: any,
+  next: any
+) => {
   if (error instanceof multer.MulterError) {
-    if (error.code === 'LIMIT_FILE_SIZE') {
+    if (error.code === "LIMIT_FILE_SIZE") {
       return res.status(400).json({
         success: false,
         error: {
-          code: 'FILE_TOO_LARGE',
-          message: 'File size exceeds the allowed limit (5MB)'
+          code: "FILE_TOO_LARGE",
+          message: "File size exceeds the allowed limit (5MB)",
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
 
-    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+    if (error.code === "LIMIT_UNEXPECTED_FILE") {
       return res.status(400).json({
         success: false,
         error: {
-          code: 'UNEXPECTED_FILE',
-          message: 'Unexpected file field'
+          code: "UNEXPECTED_FILE",
+          message: "Unexpected file field",
         },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
     }
   }
 
-  if (error.message === 'Only JPEG, JPG, and PNG files are allowed') {
+  if (error.message === "Only JPEG, JPG, and PNG files are allowed") {
     return res.status(400).json({
       success: false,
       error: {
-        code: 'INVALID_FILE_TYPE',
-        message: 'Only JPEG, JPG, and PNG files are allowed'
+        code: "INVALID_FILE_TYPE",
+        message: "Only JPEG, JPG, and PNG files are allowed",
       },
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -121,14 +132,12 @@ export const deleteFromCloudinary = async (publicId: string) => {
     if (process.env.CLOUDINARY_CLOUD_NAME) {
       await cloudinary.uploader.destroy(publicId);
     }
-  } catch (error) {
-    console.error('Error deleting file from Cloudinary:', error);
-  }
+  } catch (error) {}
 };
 
 // Helper function to extract public ID from Cloudinary URL
 export const extractPublicId = (url: string): string => {
-  const parts = url.split('/');
+  const parts = url.split("/");
   const lastPart = parts[parts.length - 1];
-  return lastPart.split('.')[0];
+  return lastPart.split(".")[0];
 };

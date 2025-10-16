@@ -20,7 +20,6 @@ export const getExpenseReport = async (req: AuthRequest, res: Response) => {
       message: 'Reports coming soon'
     });
   } catch (error) {
-    console.error('Get expense report error:', error);
     res.status(500).json({
       success: false,
       error: {

@@ -1,9 +1,9 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 // Optimized Prisma Client with better connection pooling
 const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'], // Reduced logging
-  errorFormat: 'pretty',
+  log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"], // Reduced logging
+  errorFormat: "pretty",
   datasources: {
     db: {
       url: process.env.DATABASE_URL,
@@ -18,7 +18,6 @@ export const checkDatabaseHealth = async (): Promise<boolean> => {
     return true;
   } catch (error) {
     // Only log if it's been a while since last error
-    console.error('❌ Database connection lost');
     return false;
   }
 };
@@ -26,12 +25,9 @@ export const checkDatabaseHealth = async (): Promise<boolean> => {
 // Optimized reconnect function
 export const reconnectDatabase = async (): Promise<void> => {
   try {
-    console.log('🔄 Reconnecting to database...');
     await prisma.$disconnect();
     await prisma.$connect();
-    console.log('✅ Database reconnected successfully');
   } catch (error) {
-    console.error('❌ Database reconnection failed:', error);
     throw error;
   }
 };
@@ -40,17 +36,20 @@ export const reconnectDatabase = async (): Promise<void> => {
 let lastErrorTime = 0;
 const ERROR_COOLDOWN = 30000; // 30 seconds cooldown between error logs
 
-prisma.$on('error', async (e: any) => {
+prisma.$on("error", async (e: any) => {
   const now = Date.now();
-  
+
   // Only log errors every 30 seconds to reduce spam
   if (now - lastErrorTime > ERROR_COOLDOWN) {
-    console.error('❌ Prisma error:', e.message);
     lastErrorTime = now;
   }
-  
+
   // If it's a connection error, try to reconnect
-  if (e.message?.includes('connection') || e.message?.includes('Connection') || e.message?.includes('Closed')) {
+  if (
+    e.message?.includes("connection") ||
+    e.message?.includes("Connection") ||
+    e.message?.includes("Closed")
+  ) {
     try {
       await reconnectDatabase();
     } catch (reconnectError) {
@@ -62,10 +61,9 @@ prisma.$on('error', async (e: any) => {
 // Graceful shutdown
 const gracefulShutdown = async () => {
   await prisma.$disconnect();
-  console.log('🗄️ Database disconnected');
 };
 
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);
 
 export default prisma;

@@ -64,7 +64,6 @@ export const getCompanyMoneyRecords = async (req: AuthRequest, res: Response) =>
       }
     });
   } catch (error) {
-    console.error('Get company money records error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -104,7 +103,6 @@ export const createCompanyMoneyRecord = async (req: AuthRequest, res: Response) 
       });
     }
 
-    console.error('Create company money record error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -161,7 +159,6 @@ export const updateCompanyMoneyRecord = async (req: AuthRequest, res: Response) 
       });
     }
 
-    console.error('Update company money record error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -204,7 +201,6 @@ export const deleteCompanyMoneyRecord = async (req: AuthRequest, res: Response) 
       message: 'Company money record deleted successfully'
     });
   } catch (error) {
-    console.error('Delete company money record error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -286,7 +282,6 @@ export const getCompanyMoneyStats = async (req: AuthRequest, res: Response) => {
       }
     });
   } catch (error) {
-    console.error('Get company money stats error:', error);
     res.status(500).json({
       success: false,
       error: {

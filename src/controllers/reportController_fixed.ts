@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
+import { Request, Response } from "express";
+import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -33,29 +33,31 @@ export const getExpenseReport = async (req: AuthRequest, res: Response) => {
         where,
         include: {
           category: {
-            select: { name: true }
-          }
+            select: { name: true },
+          },
         },
-        orderBy: { expenseDate: 'desc' }
+        orderBy: { expenseDate: "desc" },
       }),
       prisma.expense.aggregate({
         where,
         _sum: { totalPrice: true },
-        _count: true
+        _count: true,
       }),
       prisma.expense.groupBy({
-        by: ['categoryId'],
+        by: ["categoryId"],
         where,
         _sum: { totalPrice: true },
-        _count: true
-      })
+        _count: true,
+      }),
     ]);
 
     // Get category names for grouped data
-    const categoryIds = expensesByCategory.map(item => item.categoryId).filter((id): id is string => id !== null);
+    const categoryIds = expensesByCategory
+      .map((item) => item.categoryId)
+      .filter((id): id is string => id !== null);
     const categories = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
-      select: { id: true, name: true }
+      select: { id: true, name: true },
     });
 
     const categoryMap = categories.reduce((acc, cat) => {
@@ -63,11 +65,13 @@ export const getExpenseReport = async (req: AuthRequest, res: Response) => {
       return acc;
     }, {} as Record<string, string>);
 
-    const expensesByCategoryWithNames = expensesByCategory.map(item => ({
+    const expensesByCategoryWithNames = expensesByCategory.map((item) => ({
       categoryId: item.categoryId,
-      categoryName: item.categoryId ? categoryMap[item.categoryId] || 'Unknown' : 'Uncategorized',
+      categoryName: item.categoryId
+        ? categoryMap[item.categoryId] || "Unknown"
+        : "Uncategorized",
       totalAmount: Number(item._sum.totalPrice || 0),
-      count: item._count
+      count: item._count,
     }));
 
     res.json({
@@ -77,18 +81,17 @@ export const getExpenseReport = async (req: AuthRequest, res: Response) => {
         summary: {
           totalAmount: Number(totalAmount._sum.totalPrice || 0),
           totalCount: totalAmount._count,
-          expensesByCategory: expensesByCategoryWithNames
-        }
-      }
+          expensesByCategory: expensesByCategoryWithNames,
+        },
+      },
     });
   } catch (error) {
-    console.error('Get expense report error:', error);
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch expense report'
-      }
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch expense report",
+      },
     });
   }
 };
@@ -112,32 +115,35 @@ export const getBudgetReport = async (req: AuthRequest, res: Response) => {
             expense: {
               include: {
                 category: {
-                  select: { name: true }
-                }
-              }
-            }
-          }
-        }
-      }
+                  select: { name: true },
+                },
+              },
+            },
+          },
+        },
+      },
     });
 
     const budgetReports = await Promise.all(
       budgets.map(async (budget) => {
-        const expenses = budget.budgetExpenseToPersons.map(bep => {
+        const expenses = budget.budgetExpenseToPersons.map((bep) => {
           if (!bep.expense) {
             throw new Error("Expense cannot be null");
           }
           return bep.expense;
         });
-        
-        const totalSpent = expenses.reduce((sum, expense) => sum + Number(expense.totalPrice), 0);
+
+        const totalSpent = expenses.reduce(
+          (sum, expense) => sum + Number(expense.totalPrice),
+          0
+        );
 
         const remainingBudget = Number(budget.totalBudget) - totalSpent;
         const spentPercentage = (totalSpent / Number(budget.totalBudget)) * 100;
 
         // Get spending by category
         const expensesByCategory = expenses.reduce((acc, expense) => {
-          const categoryName = expense.category?.name || 'Uncategorized';
+          const categoryName = expense.category?.name || "Uncategorized";
           if (!acc[categoryName]) {
             acc[categoryName] = { total: 0, count: 0 };
           }
@@ -154,24 +160,23 @@ export const getBudgetReport = async (req: AuthRequest, res: Response) => {
             remainingBudget,
             spentPercentage,
             expenseCount: expenses.length,
-            expensesByCategory
-          }
+            expensesByCategory,
+          },
         };
       })
     );
 
     res.json({
       success: true,
-      data: budgetReports
+      data: budgetReports,
     });
   } catch (error) {
-    console.error('Get budget report error:', error);
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch budget report'
-      }
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch budget report",
+      },
     });
   }
 };
@@ -193,7 +198,7 @@ export const getCategoryReport = async (req: AuthRequest, res: Response) => {
     // Get categories with their expenses
     const categories = await prisma.category.findMany({
       where: { userId },
-      select: { id: true, name: true, color: true }
+      select: { id: true, name: true, color: true },
     });
 
     const categoryReports = await Promise.all(
@@ -201,19 +206,19 @@ export const getCategoryReport = async (req: AuthRequest, res: Response) => {
         const categoryExpenses = await prisma.expense.aggregate({
           where: { ...where, categoryId: category.id },
           _sum: { totalPrice: true },
-          _count: true
+          _count: true,
         });
 
         const recentExpenses = await prisma.expense.findMany({
           where: { ...where, categoryId: category.id },
-          orderBy: { expenseDate: 'desc' },
+          orderBy: { expenseDate: "desc" },
           take: 5,
           select: {
             id: true,
             itemName: true, // Corrected property name
             totalPrice: true,
-            expenseDate: true
-          }
+            expenseDate: true,
+          },
         });
 
         return {
@@ -222,7 +227,7 @@ export const getCategoryReport = async (req: AuthRequest, res: Response) => {
           categoryColor: category.color,
           totalAmount: Number(categoryExpenses._sum.totalPrice || 0),
           expenseCount: categoryExpenses._count,
-          recentExpenses
+          recentExpenses,
         };
       })
     );
@@ -232,16 +237,15 @@ export const getCategoryReport = async (req: AuthRequest, res: Response) => {
 
     res.json({
       success: true,
-      data: categoryReports
+      data: categoryReports,
     });
   } catch (error) {
-    console.error('Get category report error:', error);
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch category report'
-      }
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch category report",
+      },
     });
   }
 };
@@ -252,8 +256,12 @@ export const getMonthlyReport = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const { year, month } = req.query;
 
-    const currentYear = year ? parseInt(year as string) : new Date().getFullYear();
-    const currentMonth = month ? parseInt(month as string) - 1 : new Date().getMonth();
+    const currentYear = year
+      ? parseInt(year as string)
+      : new Date().getFullYear();
+    const currentMonth = month
+      ? parseInt(month as string) - 1
+      : new Date().getMonth();
 
     const startDate = new Date(currentYear, currentMonth, 1);
     const endDate = new Date(currentYear, currentMonth + 1, 0);
@@ -262,81 +270,85 @@ export const getMonthlyReport = async (req: AuthRequest, res: Response) => {
       userId,
       expenseDate: {
         gte: startDate,
-        lte: endDate
-      }
+        lte: endDate,
+      },
     };
 
-    const [expenses, totalAmount, dailyExpenses, budgetComparison] = await Promise.all([
-      prisma.expense.findMany({
-        where,
-        include: {
-          category: {
-            select: { name: true }
-          }
-        },
-        orderBy: { expenseDate: 'desc' }
-      }),
-      prisma.expense.aggregate({
-        where,
-        _sum: { totalPrice: true },
-        _count: true
-      }),
-      prisma.expense.groupBy({
-        by: ['expenseDate'],
-        where,
-        _sum: { totalPrice: true },
-        _count: true
-      }),
-      // Get active budgets for this period
-      prisma.budget.findMany({
-        where: {
-          userId,
-          isActive: true,
-          startDate: { lte: endDate },
-          endDate: { gte: startDate }
-        },
-        include: {
-          budgetExpenseToPersons: {
-            where: {
-              expense: {
-                expenseDate: {
-                  gte: startDate,
-                  lte: endDate
-                }
-              }
+    const [expenses, totalAmount, dailyExpenses, budgetComparison] =
+      await Promise.all([
+        prisma.expense.findMany({
+          where,
+          include: {
+            category: {
+              select: { name: true },
             },
-            include: {
-              expense: true
-            }
-          }
-        }
-      })
-    ]);
+          },
+          orderBy: { expenseDate: "desc" },
+        }),
+        prisma.expense.aggregate({
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        prisma.expense.groupBy({
+          by: ["expenseDate"],
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        // Get active budgets for this period
+        prisma.budget.findMany({
+          where: {
+            userId,
+            isActive: true,
+            startDate: { lte: endDate },
+            endDate: { gte: startDate },
+          },
+          include: {
+            budgetExpenseToPersons: {
+              where: {
+                expense: {
+                  expenseDate: {
+                    gte: startDate,
+                    lte: endDate,
+                  },
+                },
+              },
+              include: {
+                expense: true,
+              },
+            },
+          },
+        }),
+      ]);
 
     // Calculate daily breakdown
-    const dailyBreakdown = dailyExpenses.map(day => ({
+    const dailyBreakdown = dailyExpenses.map((day) => ({
       date: day.expenseDate,
       totalAmount: Number(day._sum.totalPrice || 0),
-      expenseCount: day._count
+      expenseCount: day._count,
     }));
 
     // Calculate budget comparison
     let budgetSummary = null;
     if (budgetComparison.length > 0) {
       const budget = budgetComparison[0];
-      const budgetExpenses = budget.budgetExpenseToPersons.map(bep => {
+      const budgetExpenses = budget.budgetExpenseToPersons.map((bep) => {
         if (!bep.expense) {
           throw new Error("Expense cannot be null");
         }
         return bep.expense;
       });
-      const budgetSpent = budgetExpenses.reduce((sum, expense) => sum + Number(expense.totalPrice), 0);
+      const budgetSpent = budgetExpenses.reduce(
+        (sum, expense) => sum + Number(expense.totalPrice),
+        0
+      );
 
       budgetSummary = {
         budgetAmount: Number(budget.totalBudget),
         spentAmount: budgetSpent,
         remainingAmount: Number(budget.totalBudget) - budgetSpent,
-        spentPercentage: (budgetSpent / Number(budget.totalBudget)) * 100
+        spentPercentage: (budgetSpent / Number(budget.totalBudget)) * 100,
       };
     }
 
@@ -347,26 +359,27 @@ export const getMonthlyReport = async (req: AuthRequest, res: Response) => {
           year: currentYear,
           month: currentMonth + 1,
           startDate,
-          endDate
+          endDate,
         },
         summary: {
           totalAmount: Number(totalAmount._sum.totalPrice || 0),
           expenseCount: totalAmount._count,
-          averagePerDay: Math.round((Number(totalAmount._sum.totalPrice || 0)) / endDate.getDate()),
+          averagePerDay: Math.round(
+            Number(totalAmount._sum.totalPrice || 0) / endDate.getDate()
+          ),
           dailyBreakdown,
-          budgetComparison: budgetSummary
+          budgetComparison: budgetSummary,
         },
-        expenses
-      }
+        expenses,
+      },
     });
   } catch (error) {
-    console.error('Get monthly report error:', error);
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch monthly report'
-      }
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch monthly report",
+      },
     });
   }
 };
@@ -377,7 +390,9 @@ export const getYearlyReport = async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
     const { year } = req.query;
 
-    const currentYear = year ? parseInt(year as string) : new Date().getFullYear();
+    const currentYear = year
+      ? parseInt(year as string)
+      : new Date().getFullYear();
     const startDate = new Date(currentYear, 0, 1);
     const endDate = new Date(currentYear, 11, 31);
 
@@ -385,18 +400,19 @@ export const getYearlyReport = async (req: AuthRequest, res: Response) => {
       userId,
       expenseDate: {
         gte: startDate,
-        lte: endDate
-      }
+        lte: endDate,
+      },
     };
 
-    const [totalAmount, monthlyBreakdown, categoryBreakdown, budgetComparison] = await Promise.all([
-      prisma.expense.aggregate({
-        where,
-        _sum: { totalPrice: true },
-        _count: true
-      }),
-      // Get monthly breakdown using raw query for better grouping
-      prisma.$queryRaw`
+    const [totalAmount, monthlyBreakdown, categoryBreakdown, budgetComparison] =
+      await Promise.all([
+        prisma.expense.aggregate({
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        // Get monthly breakdown using raw query for better grouping
+        prisma.$queryRaw`
         SELECT 
           EXTRACT(MONTH FROM expense_date) as month,
           SUM(total_price) as total,
@@ -408,42 +424,44 @@ export const getYearlyReport = async (req: AuthRequest, res: Response) => {
         GROUP BY EXTRACT(MONTH FROM expense_date)
         ORDER BY month
       `,
-      prisma.expense.groupBy({
-        by: ['categoryId'],
-        where,
-        _sum: { totalPrice: true },
-        _count: true
-      }),
-      prisma.budget.findMany({
-        where: {
-          userId,
-          isActive: true,
-          startDate: { lte: endDate },
-          endDate: { gte: startDate }
-        },
-        include: {
-          budgetExpenseToPersons: {
-            where: {
-              expense: {
-                expenseDate: {
-                  gte: startDate,
-                  lte: endDate
-                }
-              }
+        prisma.expense.groupBy({
+          by: ["categoryId"],
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        prisma.budget.findMany({
+          where: {
+            userId,
+            isActive: true,
+            startDate: { lte: endDate },
+            endDate: { gte: startDate },
+          },
+          include: {
+            budgetExpenseToPersons: {
+              where: {
+                expense: {
+                  expenseDate: {
+                    gte: startDate,
+                    lte: endDate,
+                  },
+                },
+              },
+              include: {
+                expense: true,
+              },
             },
-            include: {
-              expense: true
-            }
-          }
-        }
-      })
-    ]);
+          },
+        }),
+      ]);
 
     // Get category names
-    const categoryIds = categoryBreakdown.map(item => item.categoryId).filter((id): id is string => id !== null);
+    const categoryIds = categoryBreakdown
+      .map((item) => item.categoryId)
+      .filter((id): id is string => id !== null);
     const categories = await prisma.category.findMany({
       where: { id: { in: categoryIds } },
-      select: { id: true, name: true }
+      select: { id: true, name: true },
     });
 
     const categoryMap = categories.reduce((acc, cat) => {
@@ -451,11 +469,13 @@ export const getYearlyReport = async (req: AuthRequest, res: Response) => {
       return acc;
     }, {} as Record<string, string>);
 
-    const categoryReports = categoryBreakdown.map(item => ({
+    const categoryReports = categoryBreakdown.map((item) => ({
       categoryId: item.categoryId,
-      categoryName: item.categoryId ? categoryMap[item.categoryId] || 'Unknown' : 'Uncategorized',
+      categoryName: item.categoryId
+        ? categoryMap[item.categoryId] || "Unknown"
+        : "Uncategorized",
       totalAmount: Number(item._sum.totalPrice || 0),
-      count: item._count
+      count: item._count,
     }));
 
     res.json({
@@ -465,20 +485,21 @@ export const getYearlyReport = async (req: AuthRequest, res: Response) => {
         summary: {
           totalAmount: Number(totalAmount._sum.totalPrice || 0),
           expenseCount: totalAmount._count,
-          averagePerMonth: Math.round((Number(totalAmount._sum.totalPrice || 0)) / 12),
+          averagePerMonth: Math.round(
+            Number(totalAmount._sum.totalPrice || 0) / 12
+          ),
           monthlyBreakdown,
-          categoryBreakdown: categoryReports
-        }
-      }
+          categoryBreakdown: categoryReports,
+        },
+      },
     });
   } catch (error) {
-    console.error('Get yearly report error:', error);
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to fetch yearly report'
-      }
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch yearly report",
+      },
     });
   }
 };
@@ -491,9 +512,9 @@ export const exportReport = async (req: AuthRequest, res: Response) => {
 
     // For now, just return the data in JSON format
     // In a real implementation, you would generate CSV/PDF here
-    
+
     const where: any = { userId };
-    
+
     if (startDate || endDate) {
       where.expenseDate = {};
       if (startDate) where.expenseDate.gte = new Date(startDate as string);
@@ -504,21 +525,34 @@ export const exportReport = async (req: AuthRequest, res: Response) => {
       where,
       include: {
         category: {
-          select: { name: true }
-        }
+          select: { name: true },
+        },
       },
-      orderBy: { expenseDate: 'desc' }
+      orderBy: { expenseDate: "desc" },
     });
 
-    if (format === 'csv') {
+    if (format === "csv") {
       // Generate CSV format
-      const csvHeader = 'Date,Product Name,Category,Unit Price,Quantity,Unit,Total Price,Description\n';
-      const csvData = expenses.map(expense => 
-        `${expense.expenseDate.toISOString().split('T')[0]},${expense.itemName},"${expense.category?.name || 'Uncategorized'}",${expense.unitPrice},${expense.quantity},${expense.unit},${expense.totalPrice},"${expense.description || ''}"`
-      ).join('\n');
-      
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', 'attachment; filename=expense-report.csv');
+      const csvHeader =
+        "Date,Product Name,Category,Unit Price,Quantity,Unit,Total Price,Description\n";
+      const csvData = expenses
+        .map(
+          (expense) =>
+            `${expense.expenseDate.toISOString().split("T")[0]},${
+              expense.itemName
+            },"${expense.category?.name || "Uncategorized"}",${
+              expense.unitPrice
+            },${expense.quantity},${expense.unit},${expense.totalPrice},"${
+              expense.description || ""
+            }"`
+        )
+        .join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=expense-report.csv"
+      );
       res.send(csvHeader + csvData);
     } else {
       // Return JSON format
@@ -526,21 +560,20 @@ export const exportReport = async (req: AuthRequest, res: Response) => {
         success: true,
         data: expenses,
         meta: {
-          format: format || 'json',
-          type: type || 'expense',
+          format: format || "json",
+          type: type || "expense",
           exportDate: new Date(),
-          totalRecords: expenses.length
-        }
+          totalRecords: expenses.length,
+        },
       });
     }
   } catch (error) {
-    console.error('Export report error:', error);
     res.status(500).json({
       success: false,
       error: {
-        code: 'INTERNAL_ERROR',
-        message: 'Failed to export report'
-      }
+        code: "INTERNAL_ERROR",
+        message: "Failed to export report",
+      },
     });
   }
 };

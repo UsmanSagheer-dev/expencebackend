@@ -1,268 +1,278 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCompanyMoneyStats = exports.deleteCompanyMoneyRecord = exports.updateCompanyMoneyRecord = exports.createCompanyMoneyRecord = exports.getCompanyMoneyRecords = void 0;
+exports.getCompanyMoneyStats =
+  exports.deleteCompanyMoneyRecord =
+  exports.updateCompanyMoneyRecord =
+  exports.createCompanyMoneyRecord =
+  exports.getCompanyMoneyRecords =
+    void 0;
 const client_1 = require("@prisma/client");
 const zod_1 = require("zod");
 const prisma = new client_1.PrismaClient();
 // Validation schemas
 const createCompanyMoneySchema = zod_1.z.object({
-    companyName: zod_1.z.string().min(1, 'Company name is required'),
-    amountReceived: zod_1.z.number().positive('Amount received must be positive'),
-    amountReturned: zod_1.z.number().min(0, 'Amount returned must be non-negative').optional().default(0),
-    transactionDate: zod_1.z.string().transform((str) => new Date(str)),
-    description: zod_1.z.string().optional(),
+  companyName: zod_1.z.string().min(1, "Company name is required"),
+  amountReceived: zod_1.z.number().positive("Amount received must be positive"),
+  amountReturned: zod_1.z
+    .number()
+    .min(0, "Amount returned must be non-negative")
+    .optional()
+    .default(0),
+  transactionDate: zod_1.z.string().transform((str) => new Date(str)),
+  description: zod_1.z.string().optional(),
 });
 const updateCompanyMoneySchema = createCompanyMoneySchema.partial();
 // Get company money records
 const getCompanyMoneyRecords = async (req, res) => {
-    try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        const companyName = req.query.companyName;
-        const offset = (page - 1) * limit;
-        const where = {
-            userId: req.user.id
-        };
-        if (companyName) {
-            where.companyName = {
-                contains: companyName,
-                mode: 'insensitive'
-            };
-        }
-        const [records, total] = await Promise.all([
-            prisma.companyMoneyRecord.findMany({
-                where,
-                orderBy: { createdAt: 'desc' },
-                skip: offset,
-                take: limit
-            }),
-            prisma.companyMoneyRecord.count({ where })
-        ]);
-        const totalPages = Math.ceil(total / limit);
-        res.json({
-            success: true,
-            data: records,
-            pagination: {
-                page,
-                limit,
-                total,
-                totalPages
-            }
-        });
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const companyName = req.query.companyName;
+    const offset = (page - 1) * limit;
+    const where = {
+      userId: req.user.id,
+    };
+    if (companyName) {
+      where.companyName = {
+        contains: companyName,
+        mode: "insensitive",
+      };
     }
-    catch (error) {
-        console.error('Get company money records error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch company money records'
-            }
-        });
-    }
+    const [records, total] = await Promise.all([
+      prisma.companyMoneyRecord.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: offset,
+        take: limit,
+      }),
+      prisma.companyMoneyRecord.count({ where }),
+    ]);
+    const totalPages = Math.ceil(total / limit);
+    res.json({
+      success: true,
+      data: records,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch company money records",
+      },
+    });
+  }
 };
 exports.getCompanyMoneyRecords = getCompanyMoneyRecords;
 // Create company money record
 const createCompanyMoneyRecord = async (req, res) => {
-    try {
-        const validatedData = createCompanyMoneySchema.parse(req.body);
-        const record = await prisma.companyMoneyRecord.create({
-            data: {
-                ...validatedData,
-                userId: req.user.id
-            }
-        });
-        res.status(201).json({
-            success: true,
-            data: record,
-            message: 'Company money record created successfully'
-        });
+  try {
+    const validatedData = createCompanyMoneySchema.parse(req.body);
+    const record = await prisma.companyMoneyRecord.create({
+      data: {
+        ...validatedData,
+        userId: req.user.id,
+      },
+    });
+    res.status(201).json({
+      success: true,
+      data: record,
+      message: "Company money record created successfully",
+    });
+  } catch (error) {
+    if (error instanceof zod_1.z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid input data",
+          details: error.issues,
+        },
+      });
     }
-    catch (error) {
-        if (error instanceof zod_1.z.ZodError) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'VALIDATION_ERROR',
-                    message: 'Invalid input data',
-                    details: error.issues
-                }
-            });
-        }
-        console.error('Create company money record error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to create company money record'
-            }
-        });
-    }
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to create company money record",
+      },
+    });
+  }
 };
 exports.createCompanyMoneyRecord = createCompanyMoneyRecord;
 // Update company money record
 const updateCompanyMoneyRecord = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const validatedData = updateCompanyMoneySchema.parse(req.body);
-        // Check if record exists and belongs to user
-        const existingRecord = await prisma.companyMoneyRecord.findFirst({
-            where: {
-                id,
-                userId: req.user.id
-            }
-        });
-        if (!existingRecord) {
-            return res.status(404).json({
-                success: false,
-                error: {
-                    code: 'RECORD_NOT_FOUND',
-                    message: 'Company money record not found'
-                }
-            });
-        }
-        const updatedRecord = await prisma.companyMoneyRecord.update({
-            where: { id },
-            data: validatedData
-        });
-        res.json({
-            success: true,
-            data: updatedRecord,
-            message: 'Company money record updated successfully'
-        });
+  try {
+    const { id } = req.params;
+    const validatedData = updateCompanyMoneySchema.parse(req.body);
+    // Check if record exists and belongs to user
+    const existingRecord = await prisma.companyMoneyRecord.findFirst({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
+    if (!existingRecord) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: "RECORD_NOT_FOUND",
+          message: "Company money record not found",
+        },
+      });
     }
-    catch (error) {
-        if (error instanceof zod_1.z.ZodError) {
-            return res.status(400).json({
-                success: false,
-                error: {
-                    code: 'VALIDATION_ERROR',
-                    message: 'Invalid input data',
-                    details: error.issues
-                }
-            });
-        }
-        console.error('Update company money record error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to update company money record'
-            }
-        });
+    const updatedRecord = await prisma.companyMoneyRecord.update({
+      where: { id },
+      data: validatedData,
+    });
+    res.json({
+      success: true,
+      data: updatedRecord,
+      message: "Company money record updated successfully",
+    });
+  } catch (error) {
+    if (error instanceof zod_1.z.ZodError) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "VALIDATION_ERROR",
+          message: "Invalid input data",
+          details: error.issues,
+        },
+      });
     }
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to update company money record",
+      },
+    });
+  }
 };
 exports.updateCompanyMoneyRecord = updateCompanyMoneyRecord;
 // Delete company money record
 const deleteCompanyMoneyRecord = async (req, res) => {
-    try {
-        const { id } = req.params;
-        // Check if record exists and belongs to user
-        const existingRecord = await prisma.companyMoneyRecord.findFirst({
-            where: {
-                id,
-                userId: req.user.id
-            }
-        });
-        if (!existingRecord) {
-            return res.status(404).json({
-                success: false,
-                error: {
-                    code: 'RECORD_NOT_FOUND',
-                    message: 'Company money record not found'
-                }
-            });
-        }
-        await prisma.companyMoneyRecord.delete({
-            where: { id }
-        });
-        res.json({
-            success: true,
-            message: 'Company money record deleted successfully'
-        });
+  try {
+    const { id } = req.params;
+    // Check if record exists and belongs to user
+    const existingRecord = await prisma.companyMoneyRecord.findFirst({
+      where: {
+        id,
+        userId: req.user.id,
+      },
+    });
+    if (!existingRecord) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          code: "RECORD_NOT_FOUND",
+          message: "Company money record not found",
+        },
+      });
     }
-    catch (error) {
-        console.error('Delete company money record error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to delete company money record'
-            }
-        });
-    }
+    await prisma.companyMoneyRecord.delete({
+      where: { id },
+    });
+    res.json({
+      success: true,
+      message: "Company money record deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to delete company money record",
+      },
+    });
+  }
 };
 exports.deleteCompanyMoneyRecord = deleteCompanyMoneyRecord;
 // Get company money statistics
 const getCompanyMoneyStats = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const [totalAmountReceived, totalAmountReturned, monthlyAmountReceived, monthlyAmountReturned, recentRecords, recordsCount] = await Promise.all([
-            prisma.companyMoneyRecord.aggregate({
-                where: { userId },
-                _sum: { amountReceived: true }
-            }),
-            prisma.companyMoneyRecord.aggregate({
-                where: { userId },
-                _sum: { amountReturned: true }
-            }),
-            prisma.companyMoneyRecord.aggregate({
-                where: {
-                    userId,
-                    transactionDate: {
-                        gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-                    }
-                },
-                _sum: { amountReceived: true }
-            }),
-            prisma.companyMoneyRecord.aggregate({
-                where: {
-                    userId,
-                    transactionDate: {
-                        gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-                    }
-                },
-                _sum: { amountReturned: true }
-            }),
-            prisma.companyMoneyRecord.findMany({
-                where: { userId },
-                orderBy: { createdAt: 'desc' },
-                take: 5
-            }),
-            prisma.companyMoneyRecord.count({
-                where: { userId }
-            })
-        ]);
-        const totalReceived = Number(totalAmountReceived._sum.amountReceived || 0);
-        const totalReturned = Number(totalAmountReturned._sum.amountReturned || 0);
-        const netBalance = totalReceived - totalReturned;
-        const monthlyReceived = Number(monthlyAmountReceived._sum.amountReceived || 0);
-        const monthlyReturned = Number(monthlyAmountReturned._sum.amountReturned || 0);
-        const monthlyNet = monthlyReceived - monthlyReturned;
-        res.json({
-            success: true,
-            data: {
-                totalAmountReceived: totalReceived,
-                totalAmountReturned: totalReturned,
-                netBalance,
-                monthlyAmountReceived: monthlyReceived,
-                monthlyAmountReturned: monthlyReturned,
-                monthlyNet,
-                totalRecords: recordsCount,
-                recentRecords
-            }
-        });
-    }
-    catch (error) {
-        console.error('Get company money stats error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch company money statistics'
-            }
-        });
-    }
+  try {
+    const userId = req.user.id;
+    const [
+      totalAmountReceived,
+      totalAmountReturned,
+      monthlyAmountReceived,
+      monthlyAmountReturned,
+      recentRecords,
+      recordsCount,
+    ] = await Promise.all([
+      prisma.companyMoneyRecord.aggregate({
+        where: { userId },
+        _sum: { amountReceived: true },
+      }),
+      prisma.companyMoneyRecord.aggregate({
+        where: { userId },
+        _sum: { amountReturned: true },
+      }),
+      prisma.companyMoneyRecord.aggregate({
+        where: {
+          userId,
+          transactionDate: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          },
+        },
+        _sum: { amountReceived: true },
+      }),
+      prisma.companyMoneyRecord.aggregate({
+        where: {
+          userId,
+          transactionDate: {
+            gte: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+          },
+        },
+        _sum: { amountReturned: true },
+      }),
+      prisma.companyMoneyRecord.findMany({
+        where: { userId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      }),
+      prisma.companyMoneyRecord.count({
+        where: { userId },
+      }),
+    ]);
+    const totalReceived = Number(totalAmountReceived._sum.amountReceived || 0);
+    const totalReturned = Number(totalAmountReturned._sum.amountReturned || 0);
+    const netBalance = totalReceived - totalReturned;
+    const monthlyReceived = Number(
+      monthlyAmountReceived._sum.amountReceived || 0
+    );
+    const monthlyReturned = Number(
+      monthlyAmountReturned._sum.amountReturned || 0
+    );
+    const monthlyNet = monthlyReceived - monthlyReturned;
+    res.json({
+      success: true,
+      data: {
+        totalAmountReceived: totalReceived,
+        totalAmountReturned: totalReturned,
+        netBalance,
+        monthlyAmountReceived: monthlyReceived,
+        monthlyAmountReturned: monthlyReturned,
+        monthlyNet,
+        totalRecords: recordsCount,
+        recentRecords,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch company money statistics",
+      },
+    });
+  }
 };
 exports.getCompanyMoneyStats = getCompanyMoneyStats;
 //# sourceMappingURL=companyMoneyController.js.map

@@ -8,7 +8,6 @@ import {
 } from '@prisma/client/runtime/library';
 
 export const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
-  console.error('Error:', error);
 
   // Prisma errors
   if (error instanceof PrismaClientKnownRequestError) {

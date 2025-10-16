@@ -37,7 +37,6 @@ router.get('/', async (req: any, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Get expenses error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -110,7 +109,6 @@ router.post('/', validate(createExpenseSchema), async (req: any, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Create expense error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -161,7 +159,6 @@ router.get('/:id', async (req: any, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Get expense error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -260,7 +257,6 @@ router.put('/:id', validate(updateExpenseSchema), async (req: any, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Update expense error:', error);
     res.status(500).json({
       success: false,
       error: {
@@ -307,7 +303,6 @@ router.delete('/:id', async (req: any, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Delete expense error:', error);
     res.status(500).json({
       success: false,
       error: {

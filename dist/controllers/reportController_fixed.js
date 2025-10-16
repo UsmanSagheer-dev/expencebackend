@@ -1,364 +1,376 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.exportReport = exports.getYearlyReport = exports.getMonthlyReport = exports.getCategoryReport = exports.getBudgetReport = exports.getExpenseReport = void 0;
+exports.exportReport =
+  exports.getYearlyReport =
+  exports.getMonthlyReport =
+  exports.getCategoryReport =
+  exports.getBudgetReport =
+  exports.getExpenseReport =
+    void 0;
 const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
 // Get expense report
 const getExpenseReport = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { startDate, endDate, categoryId } = req.query;
-        const where = { userId };
-        if (startDate || endDate) {
-            where.expenseDate = {};
-            if (startDate)
-                where.expenseDate.gte = new Date(startDate);
-            if (endDate)
-                where.expenseDate.lte = new Date(endDate);
-        }
-        if (categoryId) {
-            where.categoryId = categoryId;
-        }
-        const [expenses, totalAmount, expensesByCategory] = await Promise.all([
-            prisma.expense.findMany({
-                where,
-                include: {
-                    category: {
-                        select: { name: true }
-                    }
-                },
-                orderBy: { expenseDate: 'desc' }
-            }),
-            prisma.expense.aggregate({
-                where,
-                _sum: { totalPrice: true },
-                _count: true
-            }),
-            prisma.expense.groupBy({
-                by: ['categoryId'],
-                where,
-                _sum: { totalPrice: true },
-                _count: true
-            })
-        ]);
-        // Get category names for grouped data
-        const categoryIds = expensesByCategory.map(item => item.categoryId).filter((id) => id !== null);
-        const categories = await prisma.category.findMany({
-            where: { id: { in: categoryIds } },
-            select: { id: true, name: true }
-        });
-        const categoryMap = categories.reduce((acc, cat) => {
-            acc[cat.id] = cat.name;
-            return acc;
-        }, {});
-        const expensesByCategoryWithNames = expensesByCategory.map(item => ({
-            categoryId: item.categoryId,
-            categoryName: item.categoryId ? categoryMap[item.categoryId] || 'Unknown' : 'Uncategorized',
-            totalAmount: Number(item._sum.totalPrice || 0),
-            count: item._count
-        }));
-        res.json({
-            success: true,
-            data: {
-                expenses,
-                summary: {
-                    totalAmount: Number(totalAmount._sum.totalPrice || 0),
-                    totalCount: totalAmount._count,
-                    expensesByCategory: expensesByCategoryWithNames
-                }
-            }
-        });
+  try {
+    const userId = req.user.id;
+    const { startDate, endDate, categoryId } = req.query;
+    const where = { userId };
+    if (startDate || endDate) {
+      where.expenseDate = {};
+      if (startDate) where.expenseDate.gte = new Date(startDate);
+      if (endDate) where.expenseDate.lte = new Date(endDate);
     }
-    catch (error) {
-        console.error('Get expense report error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch expense report'
-            }
-        });
+    if (categoryId) {
+      where.categoryId = categoryId;
     }
+    const [expenses, totalAmount, expensesByCategory] = await Promise.all([
+      prisma.expense.findMany({
+        where,
+        include: {
+          category: {
+            select: { name: true },
+          },
+        },
+        orderBy: { expenseDate: "desc" },
+      }),
+      prisma.expense.aggregate({
+        where,
+        _sum: { totalPrice: true },
+        _count: true,
+      }),
+      prisma.expense.groupBy({
+        by: ["categoryId"],
+        where,
+        _sum: { totalPrice: true },
+        _count: true,
+      }),
+    ]);
+    // Get category names for grouped data
+    const categoryIds = expensesByCategory
+      .map((item) => item.categoryId)
+      .filter((id) => id !== null);
+    const categories = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      select: { id: true, name: true },
+    });
+    const categoryMap = categories.reduce((acc, cat) => {
+      acc[cat.id] = cat.name;
+      return acc;
+    }, {});
+    const expensesByCategoryWithNames = expensesByCategory.map((item) => ({
+      categoryId: item.categoryId,
+      categoryName: item.categoryId
+        ? categoryMap[item.categoryId] || "Unknown"
+        : "Uncategorized",
+      totalAmount: Number(item._sum.totalPrice || 0),
+      count: item._count,
+    }));
+    res.json({
+      success: true,
+      data: {
+        expenses,
+        summary: {
+          totalAmount: Number(totalAmount._sum.totalPrice || 0),
+          totalCount: totalAmount._count,
+          expensesByCategory: expensesByCategoryWithNames,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch expense report",
+      },
+    });
+  }
 };
 exports.getExpenseReport = getExpenseReport;
 // Get budget report
 const getBudgetReport = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { budgetId } = req.query;
-        const where = { userId };
-        if (budgetId) {
-            where.id = budgetId;
-        }
-        const budgets = await prisma.budget.findMany({
-            where,
-            include: {
-                budgetExpenseToPersons: {
-                    include: {
-                        expense: {
-                            include: {
-                                category: {
-                                    select: { name: true }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        });
-        const budgetReports = await Promise.all(budgets.map(async (budget) => {
-            const expenses = budget.budgetExpenseToPersons.map(bep => {
-                if (!bep.expense) {
-                    throw new Error("Expense cannot be null");
-                }
-                return bep.expense;
-            });
-            const totalSpent = expenses.reduce((sum, expense) => sum + Number(expense.totalPrice), 0);
-            const remainingBudget = Number(budget.totalBudget) - totalSpent;
-            const spentPercentage = (totalSpent / Number(budget.totalBudget)) * 100;
-            // Get spending by category
-            const expensesByCategory = expenses.reduce((acc, expense) => {
-                const categoryName = expense.category?.name || 'Uncategorized';
-                if (!acc[categoryName]) {
-                    acc[categoryName] = { total: 0, count: 0 };
-                }
-                acc[categoryName].total += Number(expense.totalPrice);
-                acc[categoryName].count += 1;
-                return acc;
-            }, {});
-            return {
-                budget,
-                summary: {
-                    totalBudget: Number(budget.totalBudget),
-                    totalSpent,
-                    remainingBudget,
-                    spentPercentage,
-                    expenseCount: expenses.length,
-                    expensesByCategory
-                }
-            };
-        }));
-        res.json({
-            success: true,
-            data: budgetReports
-        });
+  try {
+    const userId = req.user.id;
+    const { budgetId } = req.query;
+    const where = { userId };
+    if (budgetId) {
+      where.id = budgetId;
     }
-    catch (error) {
-        console.error('Get budget report error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch budget report'
-            }
+    const budgets = await prisma.budget.findMany({
+      where,
+      include: {
+        budgetExpenseToPersons: {
+          include: {
+            expense: {
+              include: {
+                category: {
+                  select: { name: true },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    const budgetReports = await Promise.all(
+      budgets.map(async (budget) => {
+        const expenses = budget.budgetExpenseToPersons.map((bep) => {
+          if (!bep.expense) {
+            throw new Error("Expense cannot be null");
+          }
+          return bep.expense;
         });
-    }
+        const totalSpent = expenses.reduce(
+          (sum, expense) => sum + Number(expense.totalPrice),
+          0
+        );
+        const remainingBudget = Number(budget.totalBudget) - totalSpent;
+        const spentPercentage = (totalSpent / Number(budget.totalBudget)) * 100;
+        // Get spending by category
+        const expensesByCategory = expenses.reduce((acc, expense) => {
+          const categoryName = expense.category?.name || "Uncategorized";
+          if (!acc[categoryName]) {
+            acc[categoryName] = { total: 0, count: 0 };
+          }
+          acc[categoryName].total += Number(expense.totalPrice);
+          acc[categoryName].count += 1;
+          return acc;
+        }, {});
+        return {
+          budget,
+          summary: {
+            totalBudget: Number(budget.totalBudget),
+            totalSpent,
+            remainingBudget,
+            spentPercentage,
+            expenseCount: expenses.length,
+            expensesByCategory,
+          },
+        };
+      })
+    );
+    res.json({
+      success: true,
+      data: budgetReports,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch budget report",
+      },
+    });
+  }
 };
 exports.getBudgetReport = getBudgetReport;
 // Get category report
 const getCategoryReport = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { startDate, endDate } = req.query;
-        const where = { userId };
-        if (startDate || endDate) {
-            where.expenseDate = {};
-            if (startDate)
-                where.expenseDate.gte = new Date(startDate);
-            if (endDate)
-                where.expenseDate.lte = new Date(endDate);
-        }
-        // Get categories with their expenses
-        const categories = await prisma.category.findMany({
-            where: { userId },
-            select: { id: true, name: true, color: true }
-        });
-        const categoryReports = await Promise.all(categories.map(async (category) => {
-            const categoryExpenses = await prisma.expense.aggregate({
-                where: { ...where, categoryId: category.id },
-                _sum: { totalPrice: true },
-                _count: true
-            });
-            const recentExpenses = await prisma.expense.findMany({
-                where: { ...where, categoryId: category.id },
-                orderBy: { expenseDate: 'desc' },
-                take: 5,
-                select: {
-                    id: true,
-                    itemName: true, // Corrected property name
-                    totalPrice: true,
-                    expenseDate: true
-                }
-            });
-            return {
-                categoryId: category.id,
-                categoryName: category.name,
-                categoryColor: category.color,
-                totalAmount: Number(categoryExpenses._sum.totalPrice || 0),
-                expenseCount: categoryExpenses._count,
-                recentExpenses
-            };
-        }));
-        // Sort by total amount descending
-        categoryReports.sort((a, b) => b.totalAmount - a.totalAmount);
-        res.json({
-            success: true,
-            data: categoryReports
-        });
+  try {
+    const userId = req.user.id;
+    const { startDate, endDate } = req.query;
+    const where = { userId };
+    if (startDate || endDate) {
+      where.expenseDate = {};
+      if (startDate) where.expenseDate.gte = new Date(startDate);
+      if (endDate) where.expenseDate.lte = new Date(endDate);
     }
-    catch (error) {
-        console.error('Get category report error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch category report'
-            }
+    // Get categories with their expenses
+    const categories = await prisma.category.findMany({
+      where: { userId },
+      select: { id: true, name: true, color: true },
+    });
+    const categoryReports = await Promise.all(
+      categories.map(async (category) => {
+        const categoryExpenses = await prisma.expense.aggregate({
+          where: { ...where, categoryId: category.id },
+          _sum: { totalPrice: true },
+          _count: true,
         });
-    }
+        const recentExpenses = await prisma.expense.findMany({
+          where: { ...where, categoryId: category.id },
+          orderBy: { expenseDate: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            itemName: true, // Corrected property name
+            totalPrice: true,
+            expenseDate: true,
+          },
+        });
+        return {
+          categoryId: category.id,
+          categoryName: category.name,
+          categoryColor: category.color,
+          totalAmount: Number(categoryExpenses._sum.totalPrice || 0),
+          expenseCount: categoryExpenses._count,
+          recentExpenses,
+        };
+      })
+    );
+    // Sort by total amount descending
+    categoryReports.sort((a, b) => b.totalAmount - a.totalAmount);
+    res.json({
+      success: true,
+      data: categoryReports,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch category report",
+      },
+    });
+  }
 };
 exports.getCategoryReport = getCategoryReport;
 // Get monthly report
 const getMonthlyReport = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { year, month } = req.query;
-        const currentYear = year ? parseInt(year) : new Date().getFullYear();
-        const currentMonth = month ? parseInt(month) - 1 : new Date().getMonth();
-        const startDate = new Date(currentYear, currentMonth, 1);
-        const endDate = new Date(currentYear, currentMonth + 1, 0);
-        const where = {
+  try {
+    const userId = req.user.id;
+    const { year, month } = req.query;
+    const currentYear = year ? parseInt(year) : new Date().getFullYear();
+    const currentMonth = month ? parseInt(month) - 1 : new Date().getMonth();
+    const startDate = new Date(currentYear, currentMonth, 1);
+    const endDate = new Date(currentYear, currentMonth + 1, 0);
+    const where = {
+      userId,
+      expenseDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+    const [expenses, totalAmount, dailyExpenses, budgetComparison] =
+      await Promise.all([
+        prisma.expense.findMany({
+          where,
+          include: {
+            category: {
+              select: { name: true },
+            },
+          },
+          orderBy: { expenseDate: "desc" },
+        }),
+        prisma.expense.aggregate({
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        prisma.expense.groupBy({
+          by: ["expenseDate"],
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        // Get active budgets for this period
+        prisma.budget.findMany({
+          where: {
             userId,
-            expenseDate: {
-                gte: startDate,
-                lte: endDate
-            }
-        };
-        const [expenses, totalAmount, dailyExpenses, budgetComparison] = await Promise.all([
-            prisma.expense.findMany({
-                where,
-                include: {
-                    category: {
-                        select: { name: true }
-                    }
+            isActive: true,
+            startDate: { lte: endDate },
+            endDate: { gte: startDate },
+          },
+          include: {
+            budgetExpenseToPersons: {
+              where: {
+                expense: {
+                  expenseDate: {
+                    gte: startDate,
+                    lte: endDate,
+                  },
                 },
-                orderBy: { expenseDate: 'desc' }
-            }),
-            prisma.expense.aggregate({
-                where,
-                _sum: { totalPrice: true },
-                _count: true
-            }),
-            prisma.expense.groupBy({
-                by: ['expenseDate'],
-                where,
-                _sum: { totalPrice: true },
-                _count: true
-            }),
-            // Get active budgets for this period
-            prisma.budget.findMany({
-                where: {
-                    userId,
-                    isActive: true,
-                    startDate: { lte: endDate },
-                    endDate: { gte: startDate }
-                },
-                include: {
-                    budgetExpenseToPersons: {
-                        where: {
-                            expense: {
-                                expenseDate: {
-                                    gte: startDate,
-                                    lte: endDate
-                                }
-                            }
-                        },
-                        include: {
-                            expense: true
-                        }
-                    }
-                }
-            })
-        ]);
-        // Calculate daily breakdown
-        const dailyBreakdown = dailyExpenses.map(day => ({
-            date: day.expenseDate,
-            totalAmount: Number(day._sum.totalPrice || 0),
-            expenseCount: day._count
-        }));
-        // Calculate budget comparison
-        let budgetSummary = null;
-        if (budgetComparison.length > 0) {
-            const budget = budgetComparison[0];
-            const budgetExpenses = budget.budgetExpenseToPersons.map(bep => {
-                if (!bep.expense) {
-                    throw new Error("Expense cannot be null");
-                }
-                return bep.expense;
-            });
-            const budgetSpent = budgetExpenses.reduce((sum, expense) => sum + Number(expense.totalPrice), 0);
-            budgetSummary = {
-                budgetAmount: Number(budget.totalBudget),
-                spentAmount: budgetSpent,
-                remainingAmount: Number(budget.totalBudget) - budgetSpent,
-                spentPercentage: (budgetSpent / Number(budget.totalBudget)) * 100
-            };
+              },
+              include: {
+                expense: true,
+              },
+            },
+          },
+        }),
+      ]);
+    // Calculate daily breakdown
+    const dailyBreakdown = dailyExpenses.map((day) => ({
+      date: day.expenseDate,
+      totalAmount: Number(day._sum.totalPrice || 0),
+      expenseCount: day._count,
+    }));
+    // Calculate budget comparison
+    let budgetSummary = null;
+    if (budgetComparison.length > 0) {
+      const budget = budgetComparison[0];
+      const budgetExpenses = budget.budgetExpenseToPersons.map((bep) => {
+        if (!bep.expense) {
+          throw new Error("Expense cannot be null");
         }
-        res.json({
-            success: true,
-            data: {
-                period: {
-                    year: currentYear,
-                    month: currentMonth + 1,
-                    startDate,
-                    endDate
-                },
-                summary: {
-                    totalAmount: Number(totalAmount._sum.totalPrice || 0),
-                    expenseCount: totalAmount._count,
-                    averagePerDay: Math.round((Number(totalAmount._sum.totalPrice || 0)) / endDate.getDate()),
-                    dailyBreakdown,
-                    budgetComparison: budgetSummary
-                },
-                expenses
-            }
-        });
+        return bep.expense;
+      });
+      const budgetSpent = budgetExpenses.reduce(
+        (sum, expense) => sum + Number(expense.totalPrice),
+        0
+      );
+      budgetSummary = {
+        budgetAmount: Number(budget.totalBudget),
+        spentAmount: budgetSpent,
+        remainingAmount: Number(budget.totalBudget) - budgetSpent,
+        spentPercentage: (budgetSpent / Number(budget.totalBudget)) * 100,
+      };
     }
-    catch (error) {
-        console.error('Get monthly report error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch monthly report'
-            }
-        });
-    }
+    res.json({
+      success: true,
+      data: {
+        period: {
+          year: currentYear,
+          month: currentMonth + 1,
+          startDate,
+          endDate,
+        },
+        summary: {
+          totalAmount: Number(totalAmount._sum.totalPrice || 0),
+          expenseCount: totalAmount._count,
+          averagePerDay: Math.round(
+            Number(totalAmount._sum.totalPrice || 0) / endDate.getDate()
+          ),
+          dailyBreakdown,
+          budgetComparison: budgetSummary,
+        },
+        expenses,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch monthly report",
+      },
+    });
+  }
 };
 exports.getMonthlyReport = getMonthlyReport;
 // Get yearly report
 const getYearlyReport = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { year } = req.query;
-        const currentYear = year ? parseInt(year) : new Date().getFullYear();
-        const startDate = new Date(currentYear, 0, 1);
-        const endDate = new Date(currentYear, 11, 31);
-        const where = {
-            userId,
-            expenseDate: {
-                gte: startDate,
-                lte: endDate
-            }
-        };
-        const [totalAmount, monthlyBreakdown, categoryBreakdown, budgetComparison] = await Promise.all([
-            prisma.expense.aggregate({
-                where,
-                _sum: { totalPrice: true },
-                _count: true
-            }),
-            // Get monthly breakdown using raw query for better grouping
-            prisma.$queryRaw `
+  try {
+    const userId = req.user.id;
+    const { year } = req.query;
+    const currentYear = year ? parseInt(year) : new Date().getFullYear();
+    const startDate = new Date(currentYear, 0, 1);
+    const endDate = new Date(currentYear, 11, 31);
+    const where = {
+      userId,
+      expenseDate: {
+        gte: startDate,
+        lte: endDate,
+      },
+    };
+    const [totalAmount, monthlyBreakdown, categoryBreakdown, budgetComparison] =
+      await Promise.all([
+        prisma.expense.aggregate({
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        // Get monthly breakdown using raw query for better grouping
+        prisma.$queryRaw`
         SELECT 
           EXTRACT(MONTH FROM expense_date) as month,
           SUM(total_price) as total,
@@ -370,134 +382,148 @@ const getYearlyReport = async (req, res) => {
         GROUP BY EXTRACT(MONTH FROM expense_date)
         ORDER BY month
       `,
-            prisma.expense.groupBy({
-                by: ['categoryId'],
-                where,
-                _sum: { totalPrice: true },
-                _count: true
-            }),
-            prisma.budget.findMany({
-                where: {
-                    userId,
-                    isActive: true,
-                    startDate: { lte: endDate },
-                    endDate: { gte: startDate }
+        prisma.expense.groupBy({
+          by: ["categoryId"],
+          where,
+          _sum: { totalPrice: true },
+          _count: true,
+        }),
+        prisma.budget.findMany({
+          where: {
+            userId,
+            isActive: true,
+            startDate: { lte: endDate },
+            endDate: { gte: startDate },
+          },
+          include: {
+            budgetExpenseToPersons: {
+              where: {
+                expense: {
+                  expenseDate: {
+                    gte: startDate,
+                    lte: endDate,
+                  },
                 },
-                include: {
-                    budgetExpenseToPersons: {
-                        where: {
-                            expense: {
-                                expenseDate: {
-                                    gte: startDate,
-                                    lte: endDate
-                                }
-                            }
-                        },
-                        include: {
-                            expense: true
-                        }
-                    }
-                }
-            })
-        ]);
-        // Get category names
-        const categoryIds = categoryBreakdown.map(item => item.categoryId).filter((id) => id !== null);
-        const categories = await prisma.category.findMany({
-            where: { id: { in: categoryIds } },
-            select: { id: true, name: true }
-        });
-        const categoryMap = categories.reduce((acc, cat) => {
-            acc[cat.id] = cat.name;
-            return acc;
-        }, {});
-        const categoryReports = categoryBreakdown.map(item => ({
-            categoryId: item.categoryId,
-            categoryName: item.categoryId ? categoryMap[item.categoryId] || 'Unknown' : 'Uncategorized',
-            totalAmount: Number(item._sum.totalPrice || 0),
-            count: item._count
-        }));
-        res.json({
-            success: true,
-            data: {
-                year: currentYear,
-                summary: {
-                    totalAmount: Number(totalAmount._sum.totalPrice || 0),
-                    expenseCount: totalAmount._count,
-                    averagePerMonth: Math.round((Number(totalAmount._sum.totalPrice || 0)) / 12),
-                    monthlyBreakdown,
-                    categoryBreakdown: categoryReports
-                }
-            }
-        });
-    }
-    catch (error) {
-        console.error('Get yearly report error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to fetch yearly report'
-            }
-        });
-    }
+              },
+              include: {
+                expense: true,
+              },
+            },
+          },
+        }),
+      ]);
+    // Get category names
+    const categoryIds = categoryBreakdown
+      .map((item) => item.categoryId)
+      .filter((id) => id !== null);
+    const categories = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      select: { id: true, name: true },
+    });
+    const categoryMap = categories.reduce((acc, cat) => {
+      acc[cat.id] = cat.name;
+      return acc;
+    }, {});
+    const categoryReports = categoryBreakdown.map((item) => ({
+      categoryId: item.categoryId,
+      categoryName: item.categoryId
+        ? categoryMap[item.categoryId] || "Unknown"
+        : "Uncategorized",
+      totalAmount: Number(item._sum.totalPrice || 0),
+      count: item._count,
+    }));
+    res.json({
+      success: true,
+      data: {
+        year: currentYear,
+        summary: {
+          totalAmount: Number(totalAmount._sum.totalPrice || 0),
+          expenseCount: totalAmount._count,
+          averagePerMonth: Math.round(
+            Number(totalAmount._sum.totalPrice || 0) / 12
+          ),
+          monthlyBreakdown,
+          categoryBreakdown: categoryReports,
+        },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to fetch yearly report",
+      },
+    });
+  }
 };
 exports.getYearlyReport = getYearlyReport;
 // Export report (placeholder for CSV/PDF export)
 const exportReport = async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const { format, type, startDate, endDate } = req.query;
-        // For now, just return the data in JSON format
-        // In a real implementation, you would generate CSV/PDF here
-        const where = { userId };
-        if (startDate || endDate) {
-            where.expenseDate = {};
-            if (startDate)
-                where.expenseDate.gte = new Date(startDate);
-            if (endDate)
-                where.expenseDate.lte = new Date(endDate);
-        }
-        const expenses = await prisma.expense.findMany({
-            where,
-            include: {
-                category: {
-                    select: { name: true }
-                }
-            },
-            orderBy: { expenseDate: 'desc' }
-        });
-        if (format === 'csv') {
-            // Generate CSV format
-            const csvHeader = 'Date,Product Name,Category,Unit Price,Quantity,Unit,Total Price,Description\n';
-            const csvData = expenses.map(expense => `${expense.expenseDate.toISOString().split('T')[0]},${expense.itemName},"${expense.category?.name || 'Uncategorized'}",${expense.unitPrice},${expense.quantity},${expense.unit},${expense.totalPrice},"${expense.description || ''}"`).join('\n');
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', 'attachment; filename=expense-report.csv');
-            res.send(csvHeader + csvData);
-        }
-        else {
-            // Return JSON format
-            res.json({
-                success: true,
-                data: expenses,
-                meta: {
-                    format: format || 'json',
-                    type: type || 'expense',
-                    exportDate: new Date(),
-                    totalRecords: expenses.length
-                }
-            });
-        }
+  try {
+    const userId = req.user.id;
+    const { format, type, startDate, endDate } = req.query;
+    // For now, just return the data in JSON format
+    // In a real implementation, you would generate CSV/PDF here
+    const where = { userId };
+    if (startDate || endDate) {
+      where.expenseDate = {};
+      if (startDate) where.expenseDate.gte = new Date(startDate);
+      if (endDate) where.expenseDate.lte = new Date(endDate);
     }
-    catch (error) {
-        console.error('Export report error:', error);
-        res.status(500).json({
-            success: false,
-            error: {
-                code: 'INTERNAL_ERROR',
-                message: 'Failed to export report'
-            }
-        });
+    const expenses = await prisma.expense.findMany({
+      where,
+      include: {
+        category: {
+          select: { name: true },
+        },
+      },
+      orderBy: { expenseDate: "desc" },
+    });
+    if (format === "csv") {
+      // Generate CSV format
+      const csvHeader =
+        "Date,Product Name,Category,Unit Price,Quantity,Unit,Total Price,Description\n";
+      const csvData = expenses
+        .map(
+          (expense) =>
+            `${expense.expenseDate.toISOString().split("T")[0]},${
+              expense.itemName
+            },"${expense.category?.name || "Uncategorized"}",${
+              expense.unitPrice
+            },${expense.quantity},${expense.unit},${expense.totalPrice},"${
+              expense.description || ""
+            }"`
+        )
+        .join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        "attachment; filename=expense-report.csv"
+      );
+      res.send(csvHeader + csvData);
+    } else {
+      // Return JSON format
+      res.json({
+        success: true,
+        data: expenses,
+        meta: {
+          format: format || "json",
+          type: type || "expense",
+          exportDate: new Date(),
+          totalRecords: expenses.length,
+        },
+      });
     }
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: {
+        code: "INTERNAL_ERROR",
+        message: "Failed to export report",
+      },
+    });
+  }
 };
 exports.exportReport = exportReport;
 //# sourceMappingURL=reportController_fixed.js.map

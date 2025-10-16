@@ -271,7 +271,6 @@ export const getDashboardStats = async (req: AuthenticatedRequest, res: Response
       message: 'Dashboard statistics retrieved successfully'
     });
   } catch (error) {
-    console.error('Get dashboard stats error:', error);
     res.status(500).json({
       success: false,
       error: {
