@@ -4,7 +4,7 @@ const express_1 = require("express");
 const expenseController_1 = require("../controllers/expenseController");
 const auth_1 = require("../middleware/auth");
 const validation_1 = require("../middleware/validation");
-const upload_1 = require("../middleware/upload");
+// import { uploadBillImage, handleUploadError } from '../middleware/upload';
 const router = (0, express_1.Router)();
 // All routes require authentication
 router.use(auth_1.authenticate);
@@ -25,6 +25,6 @@ router.delete('/:id', expenseController_1.deleteExpense);
 // Bulk delete expenses
 router.delete('/bulk', expenseController_1.bulkDeleteExpenses);
 // Upload bill image
-router.post('/:id/image', upload_1.uploadBillImage, upload_1.handleUploadError, expenseController_1.uploadExpenseImage);
+// router.post('/:id/image', uploadBillImage, handleUploadError, uploadExpenseImage);
 exports.default = router;
 //# sourceMappingURL=expenseRoutes.js.map

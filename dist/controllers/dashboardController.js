@@ -14,25 +14,25 @@ const getDashboardStats = async (req, res) => {
             // Total expenses
             prisma.expense.aggregate({
                 where: { userId },
-                _sum: { amount: true },
+                _sum: { totalPrice: true },
                 _count: true
             }),
             // Monthly expenses
             prisma.expense.aggregate({
                 where: {
                     userId,
-                    date: { gte: startOfMonth }
+                    expenseDate: { gte: startOfMonth }
                 },
-                _sum: { amount: true },
+                _sum: { totalPrice: true },
                 _count: true
             }),
             // Yearly expenses
             prisma.expense.aggregate({
                 where: {
                     userId,
-                    date: { gte: startOfYear }
+                    expenseDate: { gte: startOfYear }
                 },
-                _sum: { amount: true }
+                _sum: { totalPrice: true }
             }),
             // Total budgets
             prisma.budget.count({
@@ -49,15 +49,15 @@ const getDashboardStats = async (req, res) => {
             // Total lending
             prisma.lendingRecord.aggregate({
                 where: { userId },
-                _sum: { amount: true }
+                _sum: { amountTaken: true }
             }),
             // Pending returns
             prisma.lendingRecord.aggregate({
                 where: {
                     userId,
-                    isReturned: false
+                    isSettled: false
                 },
-                _sum: { amount: true },
+                _sum: { amountTaken: true },
                 _count: true
             }),
             // Recent expenses
@@ -76,9 +76,9 @@ const getDashboardStats = async (req, res) => {
                 by: ['categoryId'],
                 where: {
                     userId,
-                    date: { gte: startOfMonth }
+                    expenseDate: { gte: startOfMonth }
                 },
-                _sum: { amount: true },
+                _sum: { totalPrice: true },
                 _count: true
             }),
             // Monthly trend (last 6 months)
@@ -88,32 +88,32 @@ const getDashboardStats = async (req, res) => {
                 return prisma.expense.aggregate({
                     where: {
                         userId,
-                        date: {
+                        expenseDate: {
                             gte: monthStart,
                             lte: monthEnd
                         }
                     },
-                    _sum: { amount: true }
+                    _sum: { totalPrice: true }
                 }).then(result => ({
                     month: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-                    amount: result._sum.amount || 0
+                    amount: result._sum.totalPrice || 0
                 }));
             })),
             // Top categories
             prisma.expense.groupBy({
                 by: ['categoryId'],
                 where: { userId },
-                _sum: { amount: true },
+                _sum: { totalPrice: true },
                 orderBy: {
                     _sum: {
-                        amount: 'desc'
+                        totalPrice: 'desc'
                     }
                 },
                 take: 5
             })
         ]);
         // Get category names for breakdown
-        const categoryIds = categoryBreakdown.map(item => item.categoryId);
+        const categoryIds = categoryBreakdown.map(item => item.categoryId).filter((id) => id !== null);
         const categories = await prisma.category.findMany({
             where: {
                 id: { in: categoryIds }
@@ -126,12 +126,12 @@ const getDashboardStats = async (req, res) => {
         }, {});
         // Format category breakdown
         const formattedCategoryBreakdown = categoryBreakdown.map(item => ({
-            categoryName: categoryMap[item.categoryId] || 'Unknown',
-            amount: item._sum.amount || 0,
+            categoryName: item.categoryId ? categoryMap[item.categoryId] || 'Unknown' : 'Unknown',
+            amount: item._sum.totalPrice || 0,
             count: item._count
         }));
         // Get category names for top categories
-        const topCategoryIds = topCategories.map(item => item.categoryId);
+        const topCategoryIds = topCategories.map(item => item.categoryId).filter((id) => id !== null);
         const topCategoriesData = await prisma.category.findMany({
             where: {
                 id: { in: topCategoryIds }
@@ -143,53 +143,70 @@ const getDashboardStats = async (req, res) => {
             return acc;
         }, {});
         const formattedTopCategories = topCategories.map(item => ({
-            categoryName: topCategoryMap[item.categoryId] || 'Unknown',
-            amount: item._sum.amount || 0
+            categoryName: item.categoryId ? topCategoryMap[item.categoryId] || 'Unknown' : 'Unknown',
+            amount: item._sum.totalPrice || 0
         }));
-        // Calculate budget utilization
-        const currentBudgets = await prisma.budget.findMany({
+        // Budget utilization calculation
+        const activeBudgetsList = await prisma.budget.findMany({
             where: {
                 userId,
+                isActive: true,
                 startDate: { lte: currentDate },
                 endDate: { gte: currentDate }
             },
             include: {
-                budgetExpensesToPerson: {
-                    include: {
-                        expense: true
-                    }
-                }
+                budgetExpenseToPersons: true
             }
         });
-        const budgetUtilization = currentBudgets.map(budget => {
-            const spent = budget.budgetExpensesToPerson.reduce((sum, item) => sum + item.expense.amount, 0);
-            const percentage = budget.totalAmount > 0 ? (spent / budget.totalAmount) * 100 : 0;
+        const budgetUtilization = await Promise.all(activeBudgetsList.map(async (budget) => {
+            // Get expenses within budget period
+            const budgetExpenses = await prisma.expense.aggregate({
+                where: {
+                    userId,
+                    expenseDate: {
+                        gte: budget.startDate,
+                        lte: budget.endDate
+                    }
+                },
+                _sum: { totalPrice: true }
+            });
+            // Calculate expenses to persons
+            const expensesToPersons = budget.budgetExpenseToPersons.reduce((sum, expense) => sum + Number(expense.amount), 0);
+            const totalExpenseUsed = Number(budgetExpenses._sum.totalPrice || 0) + expensesToPersons;
+            const remainingBudget = Number(budget.totalBudget) - totalExpenseUsed;
+            const utilizationPercentage = (totalExpenseUsed / Number(budget.totalBudget)) * 100;
             return {
-                budgetName: budget.name,
-                totalAmount: budget.totalAmount,
-                spentAmount: spent,
-                remainingAmount: budget.totalAmount - spent,
-                utilizationPercentage: Math.round(percentage)
+                budgetId: budget.id,
+                period: budget.budgetPeriod,
+                totalBudget: budget.totalBudget,
+                expenseUsed: budgetExpenses._sum.totalPrice || 0,
+                expensesToPersons,
+                totalUsed: totalExpenseUsed,
+                remaining: remainingBudget,
+                utilizationPercentage: Math.round(utilizationPercentage * 100) / 100,
+                isOverBudget: totalExpenseUsed > Number(budget.totalBudget),
+                startDate: budget.startDate,
+                endDate: budget.endDate
             };
-        });
+        }));
         const dashboardData = {
             summary: {
-                totalExpenses: totalExpenses._sum.amount || 0,
+                totalExpenses: totalExpenses._sum.totalPrice || 0,
                 totalExpenseCount: totalExpenses._count,
-                monthlyExpenses: monthlyExpenses._sum.amount || 0,
+                monthlyExpenses: monthlyExpenses._sum.totalPrice || 0,
                 monthlyExpenseCount: monthlyExpenses._count,
-                yearlyExpenses: yearlyExpenses._sum.amount || 0,
+                yearlyExpenses: yearlyExpenses._sum.totalPrice || 0,
                 totalBudgets,
                 activeBudgets,
-                totalLending: totalLending._sum.amount || 0,
-                pendingReturns: pendingReturns._sum.amount || 0,
+                totalLending: totalLending._sum.amountTaken || 0,
+                pendingReturns: pendingReturns._sum?.amountTaken ?? 0,
                 pendingReturnCount: pendingReturns._count
             },
             recentExpenses: recentExpenses.map(expense => ({
                 id: expense.id,
-                title: expense.title,
-                amount: expense.amount,
-                date: expense.date,
+                title: expense.itemName,
+                amount: expense.totalPrice,
+                date: expense.expenseDate,
                 category: expense.category?.name || 'Uncategorized',
                 createdAt: expense.createdAt
             })),

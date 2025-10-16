@@ -33,7 +33,7 @@ exports.getLendingRecords = (0, helpers_1.asyncHandler)(async (req, res, next) =
     });
 });
 exports.createLendingRecord = (0, helpers_1.asyncHandler)(async (req, res, next) => {
-    const userId = req.user?.id;
+    const userId = req.user.id;
     const { personName, amountTaken, lendingDate, description } = req.body;
     const lendingRecord = await prisma.lendingRecord.create({
         data: {

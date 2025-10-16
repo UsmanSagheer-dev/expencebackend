@@ -1,7 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 declare const prisma: PrismaClient<{
-    log: ("query" | "warn" | "error")[];
+    log: ("warn" | "error")[];
     errorFormat: "pretty";
-}, "query" | "warn" | "error", import("@prisma/client/runtime/library").DefaultArgs>;
+    datasources: {
+        db: {
+            url: string | undefined;
+        };
+    };
+}, "warn" | "error", import("@prisma/client/runtime/library").DefaultArgs>;
+export declare const checkDatabaseHealth: () => Promise<boolean>;
+export declare const reconnectDatabase: () => Promise<void>;
 export default prisma;
 //# sourceMappingURL=database.d.ts.map

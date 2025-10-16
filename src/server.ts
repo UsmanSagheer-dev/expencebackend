@@ -1,10 +1,9 @@
 import app from './app';
-import { PrismaClient } from '@prisma/client';
+import prisma from './utils/database';
 
-const prisma = new PrismaClient();
 const PORT = process.env.PORT || 3001;
 
-// Function to connect to database
+// Simple function to connect to database
 async function connectDatabase() {
   try {
     await prisma.$connect();
@@ -29,7 +28,7 @@ async function startServer() {
       console.log('================================================');
     });
 
-    // Graceful shutdown
+    // Simple graceful shutdown
     const gracefulShutdown = async () => {
       console.log('\n⏳ Gracefully shutting down...');
       

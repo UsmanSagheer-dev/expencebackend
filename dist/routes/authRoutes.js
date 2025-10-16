@@ -11,6 +11,7 @@ router.post('/login', (0, validation_1.validate)(validation_1.loginSchema), auth
 // Protected routes
 router.use(auth_1.authenticate); // All routes below require authentication
 router.get('/me', authController_1.getProfile);
+router.get('/profile', authController_1.getProfile); // Alternative endpoint for profile
 router.put('/profile', authController_1.updateProfile);
 router.post('/change-password', authController_1.changePassword);
 router.post('/logout', authController_1.logout);

@@ -20,6 +20,7 @@ router.post('/login', validate(loginSchema), login);
 router.use(authenticate); // All routes below require authentication
 
 router.get('/me', getProfile);
+router.get('/profile', getProfile); // Alternative endpoint for profile
 router.put('/profile', updateProfile);
 router.post('/change-password', changePassword);
 router.post('/logout', logout);

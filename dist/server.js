@@ -5,14 +5,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.prisma = void 0;
 const app_1 = __importDefault(require("./app"));
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
-exports.prisma = prisma;
+const database_1 = __importDefault(require("./utils/database"));
+exports.prisma = database_1.default;
 const PORT = process.env.PORT || 3001;
-// Function to connect to database
+// Simple function to connect to database
 async function connectDatabase() {
     try {
-        await prisma.$connect();
+        await database_1.default.$connect();
         console.log('✅ Database connected successfully');
     }
     catch (error) {
@@ -32,13 +31,13 @@ async function startServer() {
             console.log(`❤️  Health Check: http://localhost:${PORT}/health`);
             console.log('================================================');
         });
-        // Graceful shutdown
+        // Simple graceful shutdown
         const gracefulShutdown = async () => {
             console.log('\n⏳ Gracefully shutting down...');
             server.close(async () => {
                 console.log('🔌 HTTP server closed');
                 try {
-                    await prisma.$disconnect();
+                    await database_1.default.$disconnect();
                     console.log('🗄️  Database disconnected');
                 }
                 catch (error) {

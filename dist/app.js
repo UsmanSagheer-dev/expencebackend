@@ -15,16 +15,17 @@ const path_1 = __importDefault(require("path"));
 // Import routes
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const categoryRoutes_1 = __importDefault(require("./routes/categoryRoutes"));
-const expenseRoutes_1 = __importDefault(require("./routes/expenseRoutes"));
+const simpleExpenseRoutes_1 = __importDefault(require("./routes/simpleExpenseRoutes"));
 const budgetRoutes_1 = __importDefault(require("./routes/budgetRoutes"));
 const lendingRoutes_1 = __importDefault(require("./routes/lendingRoutes"));
 const companyMoneyRoutes_1 = __importDefault(require("./routes/companyMoneyRoutes"));
-const settingsRoutes_1 = __importDefault(require("./routes/settingsRoutes"));
+// // import settingsRoutes from './routes/settingsRoutes';
 const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
 const reportRoutes_1 = __importDefault(require("./routes/reportRoutes"));
 // Import middleware
 const errorHandler_1 = require("./middleware/errorHandler");
 const notFound_1 = require("./middleware/notFound");
+const database_1 = require("./utils/database");
 // Load environment variables
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -32,10 +33,26 @@ const PORT = process.env.PORT || 3001;
 // Security middleware
 app.use((0, helmet_1.default)());
 // CORS configuration
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8081',
+    process.env.CORS_ORIGIN
+].filter(Boolean);
 app.use((0, cors_1.default)({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        }
+        else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 // Rate limiting
@@ -48,6 +65,10 @@ const limiter = (0, express_rate_limit_1.default)({
             code: 'RATE_LIMIT_EXCEEDED',
             message: 'Too many requests from this IP, please try again later.'
         }
+    },
+    skip: (req) => {
+        // Skip rate limiting for health check endpoints
+        return req.path === '/health' || req.path === '/api/health';
     }
 });
 app.use('/api', limiter);
@@ -102,23 +123,66 @@ app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.de
     customCss: '.swagger-ui .topbar { display: none }',
     customSiteTitle: 'ExpenseFlow API Documentation'
 }));
-// Health check endpoint
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        success: true,
-        message: 'ExpenseFlow API is running!',
-        timestamp: new Date().toISOString(),
-        version: '1.0.0'
-    });
+// Optimized Health check endpoints
+app.get('/health', async (req, res) => {
+    try {
+        const isDatabaseHealthy = await (0, database_1.checkDatabaseHealth)();
+        // Cache-friendly headers to reduce requests
+        res.set({
+            'Cache-Control': 'public, max-age=10', // Cache for 10 seconds
+            'X-Backend-Status': isDatabaseHealthy ? 'connected' : 'disconnected'
+        });
+        res.status(isDatabaseHealthy ? 200 : 503).json({
+            success: isDatabaseHealthy,
+            message: isDatabaseHealthy ? 'API is running' : 'Database unavailable',
+            timestamp: new Date().toISOString(),
+            database: {
+                status: isDatabaseHealthy ? 'connected' : 'disconnected'
+            }
+        });
+    }
+    catch (error) {
+        res.status(503).json({
+            success: false,
+            message: 'Health check failed',
+            database: { status: 'error' }
+        });
+    }
+});
+// API Health check endpoint (for frontend compatibility)
+app.get('/api/health', async (req, res) => {
+    try {
+        const isDatabaseHealthy = await (0, database_1.checkDatabaseHealth)();
+        // Cache-friendly headers
+        res.set({
+            'Cache-Control': 'public, max-age=10',
+            'X-Backend-Status': isDatabaseHealthy ? 'connected' : 'disconnected'
+        });
+        res.status(isDatabaseHealthy ? 200 : 503).json({
+            success: isDatabaseHealthy,
+            message: isDatabaseHealthy ? 'API is running' : 'Database unavailable',
+            timestamp: new Date().toISOString(),
+            database: {
+                status: isDatabaseHealthy ? 'connected' : 'disconnected'
+            }
+        });
+    }
+    catch (error) {
+        res.status(503).json({
+            success: false,
+            message: 'Health check failed',
+            database: { status: 'error' }
+        });
+    }
 });
 // API Routes
 app.use('/api/auth', authRoutes_1.default);
 app.use('/api/categories', categoryRoutes_1.default);
-app.use('/api/expenses', expenseRoutes_1.default);
+app.use('/api/expenses', simpleExpenseRoutes_1.default);
 app.use('/api/budgets', budgetRoutes_1.default);
 app.use('/api/lending', lendingRoutes_1.default);
 app.use('/api/company-money', companyMoneyRoutes_1.default);
-app.use('/api/settings', settingsRoutes_1.default);
+// // app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes_1.default);
 app.use('/api/reports', reportRoutes_1.default);
 // Root endpoint
@@ -127,7 +191,7 @@ app.get('/', (req, res) => {
         success: true,
         message: 'Welcome to ExpenseFlow API',
         documentation: `${req.protocol}://${req.get('host')}/api-docs`,
-        health: `${req.protocol}://${req.get('host')}/health`
+        health: `${req.protocol}://${req.get('host')}/api/health`
     });
 });
 // Error handling middleware (must be last)

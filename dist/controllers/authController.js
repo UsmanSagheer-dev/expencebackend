@@ -1,9 +1,11 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.logout = exports.changePassword = exports.updateProfile = exports.getProfile = exports.login = exports.register = void 0;
-const client_1 = require("@prisma/client");
 const helpers_1 = require("../utils/helpers");
-const prisma = new client_1.PrismaClient();
+const database_1 = __importDefault(require("../utils/database"));
 /**
  * @swagger
  * /api/auth/register:
@@ -29,54 +31,54 @@ const prisma = new client_1.PrismaClient();
 exports.register = (0, helpers_1.asyncHandler)(async (req, res, next) => {
     const { email, password, name } = req.body;
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-        where: { email }
+    const existingUser = await database_1.default.user.findUnique({
+        where: { email },
     });
     if (existingUser) {
         return res.status(409).json({
             success: false,
             error: {
-                code: 'USER_ALREADY_EXISTS',
-                message: 'A user with this email already exists'
+                code: "USER_ALREADY_EXISTS",
+                message: "A user with this email already exists",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     // Hash password
     const hashedPassword = await (0, helpers_1.hashPassword)(password);
     // Create user
-    const user = await prisma.user.create({
+    const user = await database_1.default.user.create({
         data: {
             email,
             password: hashedPassword,
-            name
+            name,
         },
         select: {
             id: true,
             email: true,
             name: true,
-            createdAt: true
-        }
+            createdAt: true,
+        },
     });
     // Create default user settings
-    await prisma.userSettings.create({
+    await database_1.default.userSettings.create({
         data: {
-            userId: user.id
-        }
+            userId: user.id,
+        },
     });
     // Generate token
     const token = (0, helpers_1.generateToken)({
         userId: user.id,
-        email: user.email
+        email: user.email,
     });
     res.status(201).json({
         success: true,
         data: {
             user,
-            token
+            token,
         },
-        message: 'User registered successfully',
-        timestamp: new Date().toISOString()
+        message: "User registered successfully",
+        timestamp: new Date().toISOString(),
     });
 });
 /**
@@ -101,24 +103,24 @@ exports.register = (0, helpers_1.asyncHandler)(async (req, res, next) => {
 exports.login = (0, helpers_1.asyncHandler)(async (req, res, next) => {
     const { email, password } = req.body;
     // Find user
-    const user = await prisma.user.findUnique({
+    const user = await database_1.default.user.findUnique({
         where: { email },
         select: {
             id: true,
             email: true,
             name: true,
             password: true,
-            createdAt: true
-        }
+            createdAt: true,
+        },
     });
     if (!user) {
         return res.status(401).json({
             success: false,
             error: {
-                code: 'INVALID_CREDENTIALS',
-                message: 'Invalid email or password'
+                code: "INVALID_CREDENTIALS",
+                message: "Invalid email or password",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     // Check password
@@ -127,16 +129,16 @@ exports.login = (0, helpers_1.asyncHandler)(async (req, res, next) => {
         return res.status(401).json({
             success: false,
             error: {
-                code: 'INVALID_CREDENTIALS',
-                message: 'Invalid email or password'
+                code: "INVALID_CREDENTIALS",
+                message: "Invalid email or password",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     // Generate token
     const token = (0, helpers_1.generateToken)({
         userId: user.id,
-        email: user.email
+        email: user.email,
     });
     // Remove password from response
     const { password: _, ...userWithoutPassword } = user;
@@ -144,10 +146,10 @@ exports.login = (0, helpers_1.asyncHandler)(async (req, res, next) => {
         success: true,
         data: {
             user: userWithoutPassword,
-            token
+            token,
         },
-        message: 'Login successful',
-        timestamp: new Date().toISOString()
+        message: "Login successful",
+        timestamp: new Date().toISOString(),
     });
 });
 /**
@@ -161,7 +163,7 @@ exports.login = (0, helpers_1.asyncHandler)(async (req, res, next) => {
  */
 exports.getProfile = (0, helpers_1.asyncHandler)(async (req, res, next) => {
     const userId = req.user?.id;
-    const user = await prisma.user.findUnique({
+    const user = await database_1.default.user.findUnique({
         where: { id: userId },
         select: {
             id: true,
@@ -173,25 +175,25 @@ exports.getProfile = (0, helpers_1.asyncHandler)(async (req, res, next) => {
                 select: {
                     dashboardView: true,
                     currency: true,
-                    theme: true
-                }
-            }
-        }
+                    theme: true,
+                },
+            },
+        },
     });
     if (!user) {
         return res.status(404).json({
             success: false,
             error: {
-                code: 'USER_NOT_FOUND',
-                message: 'User not found'
+                code: "USER_NOT_FOUND",
+                message: "User not found",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     res.json({
         success: true,
         data: { user },
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
     });
 });
 /**
@@ -220,42 +222,42 @@ exports.updateProfile = (0, helpers_1.asyncHandler)(async (req, res, next) => {
     const { name, email } = req.body;
     // Check if email is already taken by another user
     if (email) {
-        const existingUser = await prisma.user.findFirst({
+        const existingUser = await database_1.default.user.findFirst({
             where: {
                 email,
-                NOT: { id: userId }
-            }
+                NOT: { id: userId },
+            },
         });
         if (existingUser) {
             return res.status(409).json({
                 success: false,
                 error: {
-                    code: 'EMAIL_ALREADY_EXISTS',
-                    message: 'This email is already taken'
+                    code: "EMAIL_ALREADY_EXISTS",
+                    message: "This email is already taken",
                 },
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
             });
         }
     }
-    const updatedUser = await prisma.user.update({
+    const updatedUser = await database_1.default.user.update({
         where: { id: userId },
         data: {
             ...(name && { name }),
-            ...(email && { email })
+            ...(email && { email }),
         },
         select: {
             id: true,
             email: true,
             name: true,
             createdAt: true,
-            updatedAt: true
-        }
+            updatedAt: true,
+        },
     });
     res.json({
         success: true,
         data: { user: updatedUser },
-        message: 'Profile updated successfully',
-        timestamp: new Date().toISOString()
+        message: "Profile updated successfully",
+        timestamp: new Date().toISOString(),
     });
 });
 /**
@@ -286,34 +288,34 @@ exports.changePassword = (0, helpers_1.asyncHandler)(async (req, res, next) => {
         return res.status(400).json({
             success: false,
             error: {
-                code: 'MISSING_FIELDS',
-                message: 'Current password and new password are required'
+                code: "MISSING_FIELDS",
+                message: "Current password and new password are required",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     if (newPassword.length < 6) {
         return res.status(400).json({
             success: false,
             error: {
-                code: 'INVALID_PASSWORD',
-                message: 'New password must be at least 6 characters long'
+                code: "INVALID_PASSWORD",
+                message: "New password must be at least 6 characters long",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
-    const user = await prisma.user.findUnique({
+    const user = await database_1.default.user.findUnique({
         where: { id: userId },
-        select: { password: true }
+        select: { password: true },
     });
     if (!user) {
         return res.status(404).json({
             success: false,
             error: {
-                code: 'USER_NOT_FOUND',
-                message: 'User not found'
+                code: "USER_NOT_FOUND",
+                message: "User not found",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     // Verify current password
@@ -322,23 +324,22 @@ exports.changePassword = (0, helpers_1.asyncHandler)(async (req, res, next) => {
         return res.status(401).json({
             success: false,
             error: {
-                code: 'INVALID_CURRENT_PASSWORD',
-                message: 'Current password is incorrect'
+                code: "INVALID_CURRENT_PASSWORD",
+                message: "Current password is incorrect",
             },
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         });
     }
     // Hash new password
     const hashedNewPassword = await (0, helpers_1.hashPassword)(newPassword);
-    // Update password
-    await prisma.user.update({
+    await database_1.default.user.update({
         where: { id: userId },
-        data: { password: hashedNewPassword }
+        data: { password: hashedNewPassword },
     });
     res.json({
         success: true,
-        message: 'Password changed successfully',
-        timestamp: new Date().toISOString()
+        message: "Password changed successfully",
+        timestamp: new Date().toISOString(),
     });
 });
 /**
@@ -355,8 +356,8 @@ exports.logout = (0, helpers_1.asyncHandler)(async (req, res, next) => {
     // We just return a success response
     res.json({
         success: true,
-        message: 'Logged out successfully',
-        timestamp: new Date().toISOString()
+        message: "Logged out successfully",
+        timestamp: new Date().toISOString(),
     });
 });
 //# sourceMappingURL=authController.js.map

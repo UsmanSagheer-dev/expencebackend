@@ -42,7 +42,7 @@ const getExpenseReport = async (req, res) => {
             })
         ]);
         // Get category names for grouped data
-        const categoryIds = expensesByCategory.map(item => item.categoryId).filter(Boolean);
+        const categoryIds = expensesByCategory.map(item => item.categoryId).filter((id) => id !== null);
         const categories = await prisma.category.findMany({
             where: { id: { in: categoryIds } },
             select: { id: true, name: true }
@@ -107,7 +107,12 @@ const getBudgetReport = async (req, res) => {
             }
         });
         const budgetReports = await Promise.all(budgets.map(async (budget) => {
-            const expenses = budget.budgetExpenseToPersons.map(bep => bep.expense);
+            const expenses = budget.budgetExpenseToPersons.map(bep => {
+                if (!bep.expense) {
+                    throw new Error("Expense cannot be null");
+                }
+                return bep.expense;
+            });
             const totalSpent = expenses.reduce((sum, expense) => sum + Number(expense.totalPrice), 0);
             const remainingBudget = Number(budget.totalBudget) - totalSpent;
             const spentPercentage = (totalSpent / Number(budget.totalBudget)) * 100;
@@ -180,7 +185,7 @@ const getCategoryReport = async (req, res) => {
                 take: 5,
                 select: {
                     id: true,
-                    productName: true,
+                    itemName: true, // Corrected property name
                     totalPrice: true,
                     expenseDate: true
                 }
@@ -285,7 +290,12 @@ const getMonthlyReport = async (req, res) => {
         let budgetSummary = null;
         if (budgetComparison.length > 0) {
             const budget = budgetComparison[0];
-            const budgetExpenses = budget.budgetExpenseToPersons.map(bep => bep.expense);
+            const budgetExpenses = budget.budgetExpenseToPersons.map(bep => {
+                if (!bep.expense) {
+                    throw new Error("Expense cannot be null");
+                }
+                return bep.expense;
+            });
             const budgetSpent = budgetExpenses.reduce((sum, expense) => sum + Number(expense.totalPrice), 0);
             budgetSummary = {
                 budgetAmount: Number(budget.totalBudget),
@@ -391,7 +401,7 @@ const getYearlyReport = async (req, res) => {
             })
         ]);
         // Get category names
-        const categoryIds = categoryBreakdown.map(item => item.categoryId).filter(Boolean);
+        const categoryIds = categoryBreakdown.map(item => item.categoryId).filter((id) => id !== null);
         const categories = await prisma.category.findMany({
             where: { id: { in: categoryIds } },
             select: { id: true, name: true }
@@ -459,7 +469,7 @@ const exportReport = async (req, res) => {
         if (format === 'csv') {
             // Generate CSV format
             const csvHeader = 'Date,Product Name,Category,Unit Price,Quantity,Unit,Total Price,Description\n';
-            const csvData = expenses.map(expense => `${expense.expenseDate.toISOString().split('T')[0]},${expense.productName},"${expense.category?.name || 'Uncategorized'}",${expense.unitPrice},${expense.quantity},${expense.unit},${expense.totalPrice},"${expense.description || ''}"`).join('\n');
+            const csvData = expenses.map(expense => `${expense.expenseDate.toISOString().split('T')[0]},${expense.itemName},"${expense.category?.name || 'Uncategorized'}",${expense.unitPrice},${expense.quantity},${expense.unit},${expense.totalPrice},"${expense.description || ''}"`).join('\n');
             res.setHeader('Content-Type', 'text/csv');
             res.setHeader('Content-Disposition', 'attachment; filename=expense-report.csv');
             res.send(csvHeader + csvData);

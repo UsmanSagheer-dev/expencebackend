@@ -1,0 +1,227 @@
+{
+  "info": {
+    "name": "Profile API Collection",
+    "description": "Collection for testing user profile endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{authToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Pre-request script for profile endpoints",
+          "console.log('Making request to profile endpoint');",
+          "",
+          "// Check if auth token exists",
+          "const authToken = pm.collectionVariables.get('authToken');",
+          "if (!authToken) {",
+          "    console.warn('No auth token found. Please login first.');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Post-response script for profile endpoints",
+          "pm.test('Status code is successful', function () {",
+          "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+          "});",
+          "",
+          "pm.test('Response has success field', function () {",
+          "    const jsonData = pm.response.json();",
+          "    pm.expect(jsonData).to.have.property('success');",
+          "    pm.expect(jsonData.success).to.be.true;",
+          "});",
+          "",
+          "pm.test('Response has timestamp', function () {",
+          "    const jsonData = pm.response.json();",
+          "    pm.expect(jsonData).to.have.property('timestamp');",
+          "});",
+          "",
+          "// Log response for debugging",
+          "console.log('Profile Response:', pm.response.json());"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "authToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Get User Profile",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Pre-request script for get profile",
+              "console.log('Getting user profile...');",
+              "",
+              "// Validate auth token",
+              "const authToken = pm.collectionVariables.get('authToken');",
+              "if (!authToken) {",
+              "    throw new Error('Authentication token is required. Please login first.');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Post-response script for get profile",
+              "pm.test('Profile retrieved successfully', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response contains user data', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('data');",
+              "    pm.expect(jsonData.data).to.have.property('user');",
+              "});",
+              "",
+              "pm.test('User object has required fields', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const user = jsonData.data.user;",
+              "    ",
+              "    pm.expect(user).to.have.property('id');",
+              "    pm.expect(user).to.have.property('email');",
+              "    pm.expect(user).to.have.property('name');",
+              "    pm.expect(user).to.have.property('createdAt');",
+              "});",
+              "",
+              "pm.test('User settings are included', function () {",
+              "    const jsonData = pm.response.json();",
+              "    const user = jsonData.data.user;",
+              "    ",
+              "    if (user.settings) {",
+              "        pm.expect(user.settings).to.be.an('object');",
+              "        console.log('User settings:', user.settings);",
+              "    }",
+              "});",
+              "",
+              "// Store user data for other requests",
+              "const responseJson = pm.response.json();",
+              "if (responseJson.success && responseJson.data.user) {",
+              "    pm.collectionVariables.set('userId', responseJson.data.user.id);",
+              "    pm.collectionVariables.set('userEmail', responseJson.data.user.email);",
+              "    pm.collectionVariables.set('userName', responseJson.data.user.name);",
+              "    console.log('User data stored in collection variables');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/me",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "me"]
+        },
+        "description": "Get current user profile information including user settings"
+      }
+    },
+    {
+      "name": "Get Profile (Alternative Endpoint)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Pre-request script for alternative profile endpoint",
+              "console.log('Getting user profile via /profile endpoint...');",
+              "",
+              "// Validate auth token",
+              "const authToken = pm.collectionVariables.get('authToken');",
+              "if (!authToken) {",
+              "    throw new Error('Authentication token is required. Please login first.');",
+              "}"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Post-response script for alternative profile endpoint",
+              "pm.test('Profile retrieved successfully via /profile', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test('Response matches /me endpoint structure', function () {",
+              "    const jsonData = pm.response.json();",
+              "    pm.expect(jsonData).to.have.property('success');",
+              "    pm.expect(jsonData).to.have.property('data');",
+              "    pm.expect(jsonData.data).to.have.property('user');",
+              "});",
+              "",
+              "console.log('Profile (alternative endpoint) Response:', pm.response.json());"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{authToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/auth/profile",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "auth", "profile"]
+        },
+        "description": "Alternative endpoint to get current user profile information"
+      }
+    }
+  ]
+}

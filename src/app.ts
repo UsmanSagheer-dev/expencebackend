@@ -22,6 +22,7 @@ import reportRoutes from './routes/reportRoutes';
 // Import middleware
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
+import { checkDatabaseHealth } from './utils/database';
 
 // Load environment variables
 dotenv.config();
@@ -33,10 +34,26 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet());
 
 // CORS configuration
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173', 
+  'http://localhost:8081',
+  process.env.CORS_ORIGIN
+].filter(Boolean);
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -50,6 +67,10 @@ const limiter = rateLimit({
       code: 'RATE_LIMIT_EXCEEDED',
       message: 'Too many requests from this IP, please try again later.'
     }
+  },
+  skip: (req) => {
+    // Skip rate limiting for health check endpoints
+    return req.path === '/health' || req.path === '/api/health';
   }
 });
 
@@ -111,14 +132,60 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs, {
   customSiteTitle: 'ExpenseFlow API Documentation'
 }));
 
-// Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({
-    success: true,
-    message: 'ExpenseFlow API is running!',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
-  });
+// Optimized Health check endpoints
+app.get('/health', async (req: Request, res: Response) => {
+  try {
+    const isDatabaseHealthy = await checkDatabaseHealth();
+    
+    // Cache-friendly headers to reduce requests
+    res.set({
+      'Cache-Control': 'public, max-age=10', // Cache for 10 seconds
+      'X-Backend-Status': isDatabaseHealthy ? 'connected' : 'disconnected'
+    });
+    
+    res.status(isDatabaseHealthy ? 200 : 503).json({
+      success: isDatabaseHealthy,
+      message: isDatabaseHealthy ? 'API is running' : 'Database unavailable',
+      timestamp: new Date().toISOString(),
+      database: {
+        status: isDatabaseHealthy ? 'connected' : 'disconnected'
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      message: 'Health check failed',
+      database: { status: 'error' }
+    });
+  }
+});
+
+// API Health check endpoint (for frontend compatibility)
+app.get('/api/health', async (req: Request, res: Response) => {
+  try {
+    const isDatabaseHealthy = await checkDatabaseHealth();
+    
+    // Cache-friendly headers
+    res.set({
+      'Cache-Control': 'public, max-age=10',
+      'X-Backend-Status': isDatabaseHealthy ? 'connected' : 'disconnected'
+    });
+    
+    res.status(isDatabaseHealthy ? 200 : 503).json({
+      success: isDatabaseHealthy,
+      message: isDatabaseHealthy ? 'API is running' : 'Database unavailable',
+      timestamp: new Date().toISOString(),
+      database: {
+        status: isDatabaseHealthy ? 'connected' : 'disconnected'
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      message: 'Health check failed',
+      database: { status: 'error' }
+    });
+  }
 });
 
 // API Routes
@@ -138,7 +205,7 @@ app.get('/', (req: Request, res: Response) => {
     success: true,
     message: 'Welcome to ExpenseFlow API',
     documentation: `${req.protocol}://${req.get('host')}/api-docs`,
-    health: `${req.protocol}://${req.get('host')}/health`
+    health: `${req.protocol}://${req.get('host')}/api/health`
   });
 });
 
