@@ -36,64 +36,76 @@ import prisma from "../utils/database";
  */
 export const register = asyncHandler(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const { email, password, name }: RegisterCredentials = req.body;
+    try {
+      const { email, password, name }: RegisterCredentials = req.body;
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+      // Check if user already exists
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+      });
 
-    if (existingUser) {
-      return res.status(409).json({
+      if (existingUser) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: "USER_ALREADY_EXISTS",
+            message: "A user with this email already exists",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Hash password
+      const hashedPassword = await hashPassword(password);
+
+      // Create user
+      const user = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          createdAt: true,
+        },
+      });
+
+      // Create default user settings
+      await prisma.userSettings.create({
+        data: {
+          userId: user.id,
+        },
+      });
+
+      // Generate token
+      const token = generateToken({
+        userId: user.id,
+        email: user.email,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          user,
+          token,
+        },
+        message: "User registered successfully",
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error during user registration:", error);
+      res.status(500).json({
         success: false,
         error: {
-          code: "USER_ALREADY_EXISTS",
-          message: "A user with this email already exists",
+          code: "INTERNAL_SERVER_ERROR",
+          message: "An unexpected error occurred during registration",
         },
         timestamp: new Date().toISOString(),
       });
     }
-
-    // Hash password
-    const hashedPassword = await hashPassword(password);
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        createdAt: true,
-      },
-    });
-
-    // Create default user settings
-    await prisma.userSettings.create({
-      data: {
-        userId: user.id,
-      },
-    });
-
-    // Generate token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-    });
-
-    res.status(201).json({
-      success: true,
-      data: {
-        user,
-        token,
-      },
-      message: "User registered successfully",
-      timestamp: new Date().toISOString(),
-    });
   }
 );
 
@@ -118,63 +130,80 @@ export const register = asyncHandler(
  */
 export const login = asyncHandler(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-    const { email, password }: LoginCredentials = req.body;
+    try {
+      console.log("Login request received", req.body);
+      const { email, password }: LoginCredentials = req.body;
 
-    // Find user
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        password: true,
-        createdAt: true,
-      },
-    });
+      // Find user
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          password: true,
+          createdAt: true,
+        },
+      });
 
-    if (!user) {
-      return res.status(401).json({
+      if (!user) {
+        console.log("User not found for email:", email);
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: "INVALID_CREDENTIALS",
+            message: "Invalid email or password",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Check password
+      const isPasswordValid = await comparePassword(password, user.password);
+
+      if (!isPasswordValid) {
+        console.log("Invalid password for user:", email);
+        return res.status(401).json({
+          success: false,
+          error: {
+            code: "INVALID_CREDENTIALS",
+            message: "Invalid email or password",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Generate token
+      const token = generateToken({
+        userId: user.id,
+        email: user.email,
+      });
+      console.log("Token generated for user:", email);
+
+      // Remove password from response
+      const { password: _, ...userWithoutPassword } = user;
+
+      res.json({
+        success: true,
+        data: {
+          user: userWithoutPassword,
+          token,
+        },
+        message: "Login successful",
+        timestamp: new Date().toISOString(),
+      });
+      console.log("Login successful for user:", email);
+    } catch (error) {
+      console.error("Error during user login:", error);
+      res.status(500).json({
         success: false,
         error: {
-          code: "INVALID_CREDENTIALS",
-          message: "Invalid email or password",
+          code: "INTERNAL_SERVER_ERROR",
+          message: "An unexpected error occurred during login",
         },
         timestamp: new Date().toISOString(),
       });
     }
-
-    // Check password
-    const isPasswordValid = await comparePassword(password, user.password);
-
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        success: false,
-        error: {
-          code: "INVALID_CREDENTIALS",
-          message: "Invalid email or password",
-        },
-        timestamp: new Date().toISOString(),
-      });
-    }
-
-    // Generate token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-    });
-
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
-
-    res.json({
-      success: true,
-      data: {
-        user: userWithoutPassword,
-        token,
-      },
-      message: "Login successful",
-      timestamp: new Date().toISOString(),
-    });
   }
 );
 
