@@ -40,19 +40,25 @@ const allowedOrigins = [
   'http://localhost:5173', 
   'http://localhost:8081',
   'http://localhost:8080',
-  'http://127.0.0.1:8080',  
-  'https://expencebackend.up.railway.app',
-  'https://finpal-pdf-reports.vercel.app/',
+  'http://127.0.0.1:8080',
+  'https://expencebackend.vercel.app/',
+  'https://finpal-pdf-reports.vercel.app',
+  process.env.FRONTEND_URL,
   process.env.CORS_ORIGIN
-].filter(Boolean);
+]
+  .filter((origin): origin is string => Boolean(origin))
+  .map((origin) => origin.replace(/\/+$/, ''));
 
 app.use(cors({
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+
     if (
-      allowedOrigins.includes(origin) ||
+      allowedOrigins.includes(normalizedOrigin) ||
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin) ||
       /^https:\/\/([a-z0-9-]+\.)?(lovable\.app|lovableproject\.com|railway\.app)$/i.test(origin)
     ) {
       callback(null, true);
