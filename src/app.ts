@@ -59,6 +59,7 @@ app.use(cors({
     if (
       allowedOrigins.includes(normalizedOrigin) ||
       /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin) ||
+      /^https:\/\/finpal-pdf-reports(-[a-z0-9-]+)?\.vercel\.app$/i.test(normalizedOrigin) ||
       /^https:\/\/([a-z0-9-]+\.)?(lovable\.app|lovableproject\.com|railway\.app)$/i.test(origin)
     ) {
       callback(null, true);

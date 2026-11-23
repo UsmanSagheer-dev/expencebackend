@@ -41,7 +41,7 @@ const allowedOrigins = [
     'http://localhost:8080',
     'http://127.0.0.1:8080',
     'https://expencebackend.vercel.app/',
-    'https://finpal-pdf-reports.vercel.app',
+    'https://finpal-pdf-reports-l9j7.vercel.app',
     process.env.FRONTEND_URL,
     process.env.CORS_ORIGIN
 ]
@@ -55,6 +55,7 @@ app.use((0, cors_1.default)({
         const normalizedOrigin = origin.replace(/\/+$/, '');
         if (allowedOrigins.includes(normalizedOrigin) ||
             /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(normalizedOrigin) ||
+            /^https:\/\/finpal-pdf-reports(-[a-z0-9-]+)?\.vercel\.app$/i.test(normalizedOrigin) ||
             /^https:\/\/([a-z0-9-]+\.)?(lovable\.app|lovableproject\.com|railway\.app)$/i.test(origin)) {
             callback(null, true);
         }
