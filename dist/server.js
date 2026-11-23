@@ -56,6 +56,6 @@ if (require.main === module) {
     startServer();
 }
 exports.default = app_1.default;
-// Vercel's Node.js builder invokes the CommonJS module export as a handler.
-module.exports = app_1.default;
+// Vercel invokes the module export as an HTTP handler.
+module.exports = (req, res) => (0, app_1.default)(req, res);
 //# sourceMappingURL=server.js.map
