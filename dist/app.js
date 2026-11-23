@@ -41,6 +41,7 @@ const allowedOrigins = [
     'http://localhost:8080',
     'http://127.0.0.1:8080',
     'https://expencebackend.up.railway.app',
+    'https://finpal-pdf-reports.vercel.app/',
     process.env.CORS_ORIGIN
 ].filter(Boolean);
 app.use((0, cors_1.default)({

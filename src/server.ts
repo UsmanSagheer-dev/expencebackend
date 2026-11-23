@@ -61,5 +61,5 @@ if (require.main === module) {
 export { prisma };
 export default app;
 
-// Vercel's Node.js builder invokes the CommonJS module export as a handler.
-module.exports = app;
+// Vercel invokes the module export as an HTTP handler.
+module.exports = (req: import("http").IncomingMessage, res: import("http").ServerResponse) => app(req, res);
