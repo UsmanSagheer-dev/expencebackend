@@ -42,7 +42,7 @@ const allowedOrigins = [
   'http://localhost:8080',
   'http://127.0.0.1:8080',
   'https://expencebackend.vercel.app/',
-  'https://finpal-pdf-reports.vercel.app',
+  'https://finpal-pdf-reports-l9j7.vercel.app',
   process.env.FRONTEND_URL,
   process.env.CORS_ORIGIN
 ]
