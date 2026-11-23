@@ -36,8 +36,9 @@ app.use((0, helmet_1.default)());
 const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
+    'http://localhost:8080',
     'http://localhost:8081',
-    process.env.CORS_ORIGIN
+    ...(process.env.CORS_ORIGIN || '').split(',').map((o) => o.trim())
 ].filter(Boolean);
 app.use((0, cors_1.default)({
     origin: function (origin, callback) {
