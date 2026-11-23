@@ -56,6 +56,6 @@ if (require.main === module) {
     startServer();
 }
 exports.default = app_1.default;
-// Vercel invokes the module export as an HTTP handler.
-module.exports = (req, res) => (0, app_1.default)(req, res);
+// Vercel invokes the Express app directly as the serverless function.
+module.exports = app_1.default;
 //# sourceMappingURL=server.js.map
