@@ -1,5 +1,5 @@
-import multer from 'multer';
-import { Request } from 'express';
+import multer from "multer";
+import { Request } from "express";
 export declare const upload: multer.Multer;
 export declare const uploadBillImage: import("express").RequestHandler<import("express-serve-static-core").ParamsDictionary, any, any, import("qs").ParsedQs, Record<string, any>>;
 export declare const uploadToCloudinary: (filePath: string) => Promise<string>;
