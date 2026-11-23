@@ -52,7 +52,14 @@ async function startServer() {
   }
 }
 
-// Start the application
-startServer();
+// When run locally or as a container, start the HTTP listener.
+// Vercel imports the module and serves the exported Express app directly.
+if (require.main === module) {
+  startServer();
+}
 
 export { prisma };
+export default app;
+
+// Vercel's Node.js builder invokes the CommonJS module export as a handler.
+module.exports = app;
