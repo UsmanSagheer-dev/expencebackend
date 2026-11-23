@@ -4,11 +4,6 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient({
   log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"], // Reduced logging
   errorFormat: "pretty",
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
 });
 
 // Lightweight health check - no logging to reduce noise
