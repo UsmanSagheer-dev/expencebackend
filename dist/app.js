@@ -22,6 +22,7 @@ const companyMoneyRoutes_1 = __importDefault(require("./routes/companyMoneyRoute
 // // import settingsRoutes from './routes/settingsRoutes';
 const dashboardRoutes_1 = __importDefault(require("./routes/dashboardRoutes"));
 const reportRoutes_1 = __importDefault(require("./routes/reportRoutes"));
+const messRoutes_1 = __importDefault(require("./routes/messRoutes"));
 // Import middleware
 const errorHandler_1 = require("./middleware/errorHandler");
 const notFound_1 = require("./middleware/notFound");
@@ -37,6 +38,9 @@ const allowedOrigins = [
     'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:8081',
+    'http://localhost:8080',
+    'http://127.0.0.1:8080',
+    'https://expencebackend.up.railway.app',
     process.env.CORS_ORIGIN
 ].filter(Boolean);
 app.use((0, cors_1.default)({
@@ -44,11 +48,12 @@ app.use((0, cors_1.default)({
         // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin)
             return callback(null, true);
-        if (allowedOrigins.indexOf(origin) !== -1) {
+        if (allowedOrigins.includes(origin) ||
+            /^https:\/\/([a-z0-9-]+\.)?(lovable\.app|lovableproject\.com|railway\.app)$/i.test(origin)) {
             callback(null, true);
         }
         else {
-            callback(new Error('Not allowed by CORS'));
+            callback(null, false);
         }
     },
     credentials: true,
@@ -185,6 +190,7 @@ app.use('/api/company-money', companyMoneyRoutes_1.default);
 // // app.use('/api/settings', settingsRoutes);
 app.use('/api/dashboard', dashboardRoutes_1.default);
 app.use('/api/reports', reportRoutes_1.default);
+app.use('/api/mess', messRoutes_1.default);
 // Root endpoint
 app.get('/', (req, res) => {
     res.json({

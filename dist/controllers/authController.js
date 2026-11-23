@@ -29,57 +29,70 @@ const database_1 = __importDefault(require("../utils/database"));
  *                 type: string
  */
 exports.register = (0, helpers_1.asyncHandler)(async (req, res, next) => {
-    const { email, password, name } = req.body;
-    // Check if user already exists
-    const existingUser = await database_1.default.user.findUnique({
-        where: { email },
-    });
-    if (existingUser) {
-        return res.status(409).json({
+    try {
+        const { email, password, name } = req.body;
+        // Check if user already exists
+        const existingUser = await database_1.default.user.findUnique({
+            where: { email },
+        });
+        if (existingUser) {
+            return res.status(409).json({
+                success: false,
+                error: {
+                    code: "USER_ALREADY_EXISTS",
+                    message: "A user with this email already exists",
+                },
+                timestamp: new Date().toISOString(),
+            });
+        }
+        // Hash password
+        const hashedPassword = await (0, helpers_1.hashPassword)(password);
+        // Create user
+        const user = await database_1.default.user.create({
+            data: {
+                email,
+                password: hashedPassword,
+                name,
+            },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                createdAt: true,
+            },
+        });
+        // Create default user settings
+        await database_1.default.userSettings.create({
+            data: {
+                userId: user.id,
+            },
+        });
+        // Generate token
+        const token = (0, helpers_1.generateToken)({
+            userId: user.id,
+            email: user.email,
+        });
+        res.status(201).json({
+            success: true,
+            data: {
+                user,
+                token,
+            },
+            message: "User registered successfully",
+            timestamp: new Date().toISOString(),
+        });
+    }
+    catch (error) {
+        console.error("Error during user registration:", error);
+        res.status(500).json({
             success: false,
             error: {
-                code: "USER_ALREADY_EXISTS",
-                message: "A user with this email already exists",
+                code: "INTERNAL_SERVER_ERROR",
+                message: "An unexpected error occurred during registration",
             },
             timestamp: new Date().toISOString(),
         });
     }
-    // Hash password
-    const hashedPassword = await (0, helpers_1.hashPassword)(password);
-    // Create user
-    const user = await database_1.default.user.create({
-        data: {
-            email,
-            password: hashedPassword,
-            name,
-        },
-        select: {
-            id: true,
-            email: true,
-            name: true,
-            createdAt: true,
-        },
-    });
-    // Create default user settings
-    await database_1.default.userSettings.create({
-        data: {
-            userId: user.id,
-        },
-    });
-    // Generate token
-    const token = (0, helpers_1.generateToken)({
-        userId: user.id,
-        email: user.email,
-    });
-    res.status(201).json({
-        success: true,
-        data: {
-            user,
-            token,
-        },
-        message: "User registered successfully",
-        timestamp: new Date().toISOString(),
-    });
 });
 /**
  * @swagger
@@ -101,56 +114,74 @@ exports.register = (0, helpers_1.asyncHandler)(async (req, res, next) => {
  *                 type: string
  */
 exports.login = (0, helpers_1.asyncHandler)(async (req, res, next) => {
-    const { email, password } = req.body;
-    // Find user
-    const user = await database_1.default.user.findUnique({
-        where: { email },
-        select: {
-            id: true,
-            email: true,
-            name: true,
-            password: true,
-            createdAt: true,
-        },
-    });
-    if (!user) {
-        return res.status(401).json({
+    try {
+        console.log("Login request received", req.body);
+        const { email, password } = req.body;
+        // Find user
+        const user = await database_1.default.user.findUnique({
+            where: { email },
+            select: {
+                id: true,
+                email: true,
+                name: true,
+                password: true,
+                createdAt: true,
+            },
+        });
+        if (!user) {
+            console.log("User not found for email:", email);
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: "INVALID_CREDENTIALS",
+                    message: "Invalid email or password",
+                },
+                timestamp: new Date().toISOString(),
+            });
+        }
+        // Check password
+        const isPasswordValid = await (0, helpers_1.comparePassword)(password, user.password);
+        if (!isPasswordValid) {
+            console.log("Invalid password for user:", email);
+            return res.status(401).json({
+                success: false,
+                error: {
+                    code: "INVALID_CREDENTIALS",
+                    message: "Invalid email or password",
+                },
+                timestamp: new Date().toISOString(),
+            });
+        }
+        // Generate token
+        const token = (0, helpers_1.generateToken)({
+            userId: user.id,
+            email: user.email,
+        });
+        console.log("Token generated for user:", email);
+        // Remove password from response
+        const { password: _, ...userWithoutPassword } = user;
+        res.json({
+            success: true,
+            data: {
+                user: userWithoutPassword,
+                token,
+            },
+            message: "Login successful",
+            timestamp: new Date().toISOString(),
+        });
+        console.log("Login successful for user:", email);
+    }
+    catch (error) {
+        console.error("Error during user login:", error);
+        res.status(500).json({
             success: false,
             error: {
-                code: "INVALID_CREDENTIALS",
-                message: "Invalid email or password",
+                code: "INTERNAL_SERVER_ERROR",
+                message: "An unexpected error occurred during login",
             },
             timestamp: new Date().toISOString(),
         });
     }
-    // Check password
-    const isPasswordValid = await (0, helpers_1.comparePassword)(password, user.password);
-    if (!isPasswordValid) {
-        return res.status(401).json({
-            success: false,
-            error: {
-                code: "INVALID_CREDENTIALS",
-                message: "Invalid email or password",
-            },
-            timestamp: new Date().toISOString(),
-        });
-    }
-    // Generate token
-    const token = (0, helpers_1.generateToken)({
-        userId: user.id,
-        email: user.email,
-    });
-    // Remove password from response
-    const { password: _, ...userWithoutPassword } = user;
-    res.json({
-        success: true,
-        data: {
-            user: userWithoutPassword,
-            token,
-        },
-        message: "Login successful",
-        timestamp: new Date().toISOString(),
-    });
 });
 /**
  * @swagger
