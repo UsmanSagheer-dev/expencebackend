@@ -5,7 +5,14 @@ import { authenticate } from "../middleware/auth";
 const router = Router();
 router.use(authenticate);
 
-const DATE_ONLY_FIELDS = new Set(["date", "joinedAt", "leftAt", "endedAt"]);
+const DATE_ONLY_FIELDS = new Set([
+  "date",
+  "joinedAt",
+  "leftAt",
+  "endedAt",
+  "openedAt",
+  "closedAt",
+]);
 const optionalNumber = (value: unknown) =>
   value === null || value === undefined || value === "" ? null : Number(value);
 const OMITTED_FIELDS = new Set(["userId", "updatedAt"]);
@@ -43,6 +50,7 @@ router.get("/snapshot", async (req: any, res) => {
       rotiRecords,
       cookPayments,
       teaRecords,
+      fundBatches,
       audit,
     ] = await Promise.all([
       prisma.messMember.findMany({ where: { userId } }),
@@ -53,6 +61,7 @@ router.get("/snapshot", async (req: any, res) => {
       prisma.rotiRecord.findMany({ where: { userId } }),
       prisma.cookPayment.findMany({ where: { userId } }),
       prisma.teaRecord.findMany({ where: { userId } }),
+      prisma.messFundBatch.findMany({ where: { userId }, orderBy: { openedAt: "desc" } }),
       prisma.messAuditEntry.findMany({ where: { userId }, orderBy: { timestamp: "desc" } }),
     ]);
 
@@ -67,6 +76,7 @@ router.get("/snapshot", async (req: any, res) => {
         rotiRecords: toClientRows(rotiRecords),
         cookPayments: toClientRows(cookPayments),
         teaRecords: toClientRows(teaRecords),
+        fundBatches: toClientRows(fundBatches),
         audit: toClientRows(audit),
       },
     });
@@ -88,7 +98,51 @@ router.put("/sync", async (req: any, res) => {
     const rotiRecords = Array.isArray(body.rotiRecords) ? body.rotiRecords : [];
     const cookPayments = Array.isArray(body.cookPayments) ? body.cookPayments : [];
     const teaRecords = Array.isArray(body.teaRecords) ? body.teaRecords : [];
+    const fundBatches = Array.isArray(body.fundBatches) ? body.fundBatches : [];
     const audit = Array.isArray(body.audit) ? body.audit : [];
+
+    const expectedCollections = [
+      "members",
+      "contributions",
+      "expenses",
+      "flourPurchases",
+      "flourConsumptions",
+      "rotiRecords",
+      "cookPayments",
+      "teaRecords",
+      "fundBatches",
+      "audit",
+    ];
+    if (expectedCollections.some((key) => !Array.isArray(body[key]))) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "INVALID_MESS_SNAPSHOT",
+          message: "Every mess data collection must be supplied as an array",
+        },
+      });
+    }
+
+    const memberIds = new Set(members.map((row: any) => row.id));
+    const batchIds = new Set(fundBatches.map((row: any) => row.id));
+    const invalidContribution = contributions.some(
+      (row: any) => !memberIds.has(row.memberId) || (row.batchId && !batchIds.has(row.batchId)),
+    );
+    const invalidExpense = expenses.some(
+      (row: any) => (row.purchasedBy && !memberIds.has(row.purchasedBy)) || (row.batchId && !batchIds.has(row.batchId)),
+    );
+    const invalidCookPayment = cookPayments.some(
+      (row: any) => row.batchId && !batchIds.has(row.batchId),
+    );
+    if (invalidContribution || invalidExpense || invalidCookPayment) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: "INVALID_MESS_RELATION",
+          message: "Mess transactions must reference members and fund batches in this account",
+        },
+      });
+    }
 
     await prisma.$transaction(async (tx) => {
       await tx.messAuditEntry.deleteMany({ where: { userId } });
@@ -99,6 +153,7 @@ router.put("/sync", async (req: any, res) => {
       await tx.flourPurchase.deleteMany({ where: { userId } });
       await tx.messExpense.deleteMany({ where: { userId } });
       await tx.messContribution.deleteMany({ where: { userId } });
+      await tx.messFundBatch.deleteMany({ where: { userId } });
       await tx.messMember.deleteMany({ where: { userId } });
 
       if (members.length) {
@@ -114,6 +169,22 @@ router.put("/sync", async (req: any, res) => {
           })),
         });
       }
+      if (fundBatches.length) {
+        await tx.messFundBatch.createMany({
+          data: fundBatches.map((row: any) => ({
+            id: row.id,
+            userId,
+            name: row.name,
+            status: row.status || "open",
+            openedAt: new Date(row.openedAt),
+            closedAt: row.closedAt ? new Date(row.closedAt) : null,
+            openingBalance: Number(row.openingBalance || 0),
+            closingBalance: optionalNumber(row.closingBalance),
+            carryoverFromBatchId: row.carryoverFromBatchId || null,
+            closingNote: row.closingNote || null,
+          })),
+        });
+      }
 
       if (contributions.length) {
         await tx.messContribution.createMany({
@@ -121,6 +192,7 @@ router.put("/sync", async (req: any, res) => {
             id: row.id,
             userId,
             memberId: row.memberId,
+            batchId: row.batchId || null,
             amount: Number(row.amount),
             date: new Date(row.date),
             note: row.note || "",
@@ -133,6 +205,7 @@ router.put("/sync", async (req: any, res) => {
             id: row.id,
             userId,
             purchasedById: row.purchasedBy || null,
+            batchId: row.batchId || null,
             date: new Date(row.date),
             item: row.item,
             category: row.category,
@@ -200,6 +273,7 @@ router.put("/sync", async (req: any, res) => {
             id: row.id,
             userId,
             expenseId: row.expenseId || null,
+            batchId: row.batchId || null,
             date: new Date(row.date),
             amount: Number(row.amount),
             paymentType: row.paymentType,
