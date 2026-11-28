@@ -11,6 +11,7 @@ A comprehensive expense management API built with Node.js, Express, TypeScript, 
 - **Company Money** - Manage business/company money transactions
 - **File Upload** - Bill image upload with Cloudinary integration
 - **Statistics & Reports** - Comprehensive analytics and reporting
+- **Hostel Mess Management** - Per-account members, contributions, expenses, flour, roti, cook payments, audit records, and fund batches
 - **API Documentation** - Swagger/OpenAPI documentation
 - **Rate Limiting** - Built-in rate limiting for security
 - **Error Handling** - Comprehensive error handling and validation
@@ -105,6 +106,14 @@ npm run db:migrate
 npm run db:studio
 ```
 
+For an existing production database, apply committed migrations with:
+
+```bash
+npm run db:deploy
+```
+
+The authenticated mess snapshot endpoint stores each account's complete mess ledger, including fund batches and their contribution, expense, and cook-payment links.
+
 ### 4. Build & Run
 ```bash
 # Development
@@ -164,6 +173,10 @@ Once the server is running, visit:
 - `DELETE /api/lending/:id` - Delete lending record
 - `PUT /api/lending/:id/return` - Mark return payment
 - `GET /api/lending/stats` - Get lending statistics
+
+### Hostel Mess
+- `GET /api/mess/snapshot` - Load the authenticated account's mess records
+- `PUT /api/mess/sync` - Atomically sync the account's mess records and fund-batch history
 
 ### Settings
 - `GET /api/settings` - Get user settings

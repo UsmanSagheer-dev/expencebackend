@@ -35,6 +35,7 @@ model User {
   cookPayments        CookPayment[]
   teaRecords          TeaRecord[]
   messAuditEntries    MessAuditEntry[]
+  messFundBatches     MessFundBatch[]
 
   @@map("users")
 }
@@ -208,17 +209,20 @@ model MessContribution {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
   memberId  String   @map("member_id")
+  batchId   String?  @map("batch_id")
   amount    Decimal  @db.Decimal(12, 2)
   date      DateTime @db.Date
   note      String   @default("")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user   User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  member MessMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  member MessMember     @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  batch  MessFundBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([memberId])
+  @@index([batchId])
   @@map("mess_contributions")
 }
 
@@ -226,6 +230,7 @@ model MessExpense {
   id            String   @id @default(cuid())
   userId        String   @map("user_id")
   purchasedById String?  @map("purchased_by_id")
+  batchId       String?  @map("batch_id")
   date          DateTime @db.Date
   item          String
   category      String
@@ -237,12 +242,38 @@ model MessExpense {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  purchasedBy MessMember? @relation(fields: [purchasedById], references: [id], onDelete: SetNull)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purchasedBy MessMember?    @relation(fields: [purchasedById], references: [id], onDelete: SetNull)
+  batch       MessFundBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([purchasedById])
+  @@index([batchId])
   @@map("mess_expenses")
+}
+
+model MessFundBatch {
+  id                   String    @id
+  userId               String    @map("user_id")
+  name                 String
+  status               String    @default("open")
+  openedAt             DateTime  @map("opened_at") @db.Date
+  closedAt             DateTime? @map("closed_at") @db.Date
+  openingBalance       Decimal   @map("opening_balance") @db.Decimal(12, 2)
+  closingBalance       Decimal?  @map("closing_balance") @db.Decimal(12, 2)
+  carryoverFromBatchId String?   @map("carryover_from_batch_id")
+  closingNote          String?   @map("closing_note")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  user          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions MessContribution[]
+  expenses      MessExpense[]
+  cookPayments  CookPayment[]
+
+  @@index([userId])
+  @@index([carryoverFromBatchId])
+  @@map("mess_fund_batches")
 }
 
 model FlourPurchase {
@@ -309,15 +340,18 @@ model CookPayment {
   id          String   @id @default(cuid())
   userId      String   @map("user_id")
   expenseId   String?  @map("expense_id")
+  batchId     String?  @map("batch_id")
   date        DateTime @db.Date
   amount      Decimal  @db.Decimal(12, 2)
   paymentType String   @map("payment_type")
   note        String   @default("")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  batch MessFundBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([batchId])
   @@map("cook_payments")
 }
 

@@ -8,7 +8,14 @@ const database_1 = __importDefault(require("../utils/database"));
 const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 router.use(auth_1.authenticate);
-const DATE_ONLY_FIELDS = new Set(["date", "joinedAt", "leftAt", "endedAt"]);
+const DATE_ONLY_FIELDS = new Set([
+    "date",
+    "joinedAt",
+    "leftAt",
+    "endedAt",
+    "openedAt",
+    "closedAt",
+]);
 const optionalNumber = (value) => value === null || value === undefined || value === "" ? null : Number(value);
 const OMITTED_FIELDS = new Set(["userId", "updatedAt"]);
 const RENAMED_FIELDS = { purchasedById: "purchasedBy" };
@@ -36,7 +43,7 @@ const toClientRows = (rows) => rows.map(toClientRow);
 router.get("/snapshot", async (req, res) => {
     try {
         const userId = req.user.id;
-        const [members, contributions, expenses, flourPurchases, flourConsumptions, rotiRecords, cookPayments, teaRecords, audit,] = await Promise.all([
+        const [members, contributions, expenses, flourPurchases, flourConsumptions, rotiRecords, cookPayments, teaRecords, fundBatches, audit,] = await Promise.all([
             database_1.default.messMember.findMany({ where: { userId } }),
             database_1.default.messContribution.findMany({ where: { userId } }),
             database_1.default.messExpense.findMany({ where: { userId } }),
@@ -45,6 +52,7 @@ router.get("/snapshot", async (req, res) => {
             database_1.default.rotiRecord.findMany({ where: { userId } }),
             database_1.default.cookPayment.findMany({ where: { userId } }),
             database_1.default.teaRecord.findMany({ where: { userId } }),
+            database_1.default.messFundBatch.findMany({ where: { userId }, orderBy: { openedAt: "desc" } }),
             database_1.default.messAuditEntry.findMany({ where: { userId }, orderBy: { timestamp: "desc" } }),
         ]);
         res.json({
@@ -58,6 +66,7 @@ router.get("/snapshot", async (req, res) => {
                 rotiRecords: toClientRows(rotiRecords),
                 cookPayments: toClientRows(cookPayments),
                 teaRecords: toClientRows(teaRecords),
+                fundBatches: toClientRows(fundBatches),
                 audit: toClientRows(audit),
             },
         });
@@ -79,7 +88,43 @@ router.put("/sync", async (req, res) => {
         const rotiRecords = Array.isArray(body.rotiRecords) ? body.rotiRecords : [];
         const cookPayments = Array.isArray(body.cookPayments) ? body.cookPayments : [];
         const teaRecords = Array.isArray(body.teaRecords) ? body.teaRecords : [];
+        const fundBatches = Array.isArray(body.fundBatches) ? body.fundBatches : [];
         const audit = Array.isArray(body.audit) ? body.audit : [];
+        const expectedCollections = [
+            "members",
+            "contributions",
+            "expenses",
+            "flourPurchases",
+            "flourConsumptions",
+            "rotiRecords",
+            "cookPayments",
+            "teaRecords",
+            "fundBatches",
+            "audit",
+        ];
+        if (expectedCollections.some((key) => !Array.isArray(body[key]))) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: "INVALID_MESS_SNAPSHOT",
+                    message: "Every mess data collection must be supplied as an array",
+                },
+            });
+        }
+        const memberIds = new Set(members.map((row) => row.id));
+        const batchIds = new Set(fundBatches.map((row) => row.id));
+        const invalidContribution = contributions.some((row) => !memberIds.has(row.memberId) || (row.batchId && !batchIds.has(row.batchId)));
+        const invalidExpense = expenses.some((row) => (row.purchasedBy && !memberIds.has(row.purchasedBy)) || (row.batchId && !batchIds.has(row.batchId)));
+        const invalidCookPayment = cookPayments.some((row) => row.batchId && !batchIds.has(row.batchId));
+        if (invalidContribution || invalidExpense || invalidCookPayment) {
+            return res.status(400).json({
+                success: false,
+                error: {
+                    code: "INVALID_MESS_RELATION",
+                    message: "Mess transactions must reference members and fund batches in this account",
+                },
+            });
+        }
         await database_1.default.$transaction(async (tx) => {
             await tx.messAuditEntry.deleteMany({ where: { userId } });
             await tx.teaRecord.deleteMany({ where: { userId } });
@@ -89,6 +134,7 @@ router.put("/sync", async (req, res) => {
             await tx.flourPurchase.deleteMany({ where: { userId } });
             await tx.messExpense.deleteMany({ where: { userId } });
             await tx.messContribution.deleteMany({ where: { userId } });
+            await tx.messFundBatch.deleteMany({ where: { userId } });
             await tx.messMember.deleteMany({ where: { userId } });
             if (members.length) {
                 await tx.messMember.createMany({
@@ -103,12 +149,29 @@ router.put("/sync", async (req, res) => {
                     })),
                 });
             }
+            if (fundBatches.length) {
+                await tx.messFundBatch.createMany({
+                    data: fundBatches.map((row) => ({
+                        id: row.id,
+                        userId,
+                        name: row.name,
+                        status: row.status || "open",
+                        openedAt: new Date(row.openedAt),
+                        closedAt: row.closedAt ? new Date(row.closedAt) : null,
+                        openingBalance: Number(row.openingBalance || 0),
+                        closingBalance: optionalNumber(row.closingBalance),
+                        carryoverFromBatchId: row.carryoverFromBatchId || null,
+                        closingNote: row.closingNote || null,
+                    })),
+                });
+            }
             if (contributions.length) {
                 await tx.messContribution.createMany({
                     data: contributions.map((row) => ({
                         id: row.id,
                         userId,
                         memberId: row.memberId,
+                        batchId: row.batchId || null,
                         amount: Number(row.amount),
                         date: new Date(row.date),
                         note: row.note || "",
@@ -121,6 +184,7 @@ router.put("/sync", async (req, res) => {
                         id: row.id,
                         userId,
                         purchasedById: row.purchasedBy || null,
+                        batchId: row.batchId || null,
                         date: new Date(row.date),
                         item: row.item,
                         category: row.category,
@@ -188,6 +252,7 @@ router.put("/sync", async (req, res) => {
                         id: row.id,
                         userId,
                         expenseId: row.expenseId || null,
+                        batchId: row.batchId || null,
                         date: new Date(row.date),
                         amount: Number(row.amount),
                         paymentType: row.paymentType,
